@@ -300,8 +300,16 @@ export function Editor() {
             }
           } else {
             deleteText(nodeId, offset, 'backward');
+            // After backward delete, cursor must move back by 1: the
+            // character at offset-1 was removed, so the cursor goes
+            // to the deleted character's position. clampCursor does
+            // NOT shift the offset — it only caps it to text length,
+            // which keeps the cursor one position too far right.
+            const newOffset = offset - 1;
             const newDoc = useDocumentStore.getState().document;
-            const clamped = clampCursor(newDoc, cursor);
+            const clamped = clampCursor(newDoc, {
+              position: { nodeId, offset: newOffset },
+            });
             setCursorPosition(clamped.position);
           }
           break;

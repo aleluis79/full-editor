@@ -62,6 +62,12 @@ export class LayoutEngine {
    * Layout the entire document
    */
   layoutDocument(doc: DocumentRoot): DocumentLayout {
+    // Clear cache on every full layout — operations like splitBlock modify
+    // block content in place (same blockId, different text). Without this,
+    // layoutBlock returns stale cached heights, and subsequent blocks
+    // get positioned at wrong Y coordinates (overlapping).
+    this.blockCache.clear();
+
     const blocks = getBlockNodes(doc);
     const result: BlockLayout[] = [];
     let currentY = 0;
