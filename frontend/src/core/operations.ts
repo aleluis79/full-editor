@@ -500,6 +500,16 @@ function splitRunsAtRange(
     end.runIndex++;
   }
 
+  // When end.localOffset is 0, findRunAtOffset returned the NEXT run
+  // (the strict < ensures deletion works at boundaries). But that run
+  // is NOT selected — the selection ends at its start. Exclude it.
+  // This prevents formatting from leaking past the selection into
+  // the following run (e.g. "this " → applying bold to "this" and
+  // the rest of the line beyond the selection).
+  if (end.localOffset === 0) {
+    end.runIndex--;
+  }
+
   return { startRunIndex: start.runIndex, endRunIndex: end.runIndex };
 }
 

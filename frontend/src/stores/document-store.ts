@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading, BlockNode } from '../core/types';
 import {
   createDocument,
   createParagraph,
@@ -31,7 +31,7 @@ import {
   invertOperation,
   applyOperation,
 } from '../core/operations';
-import { deleteSelection, isSelectionEmpty } from '../core/selection';
+import { deleteSelection, isSelectionEmpty, getSelectionRange } from '../core/selection';
 import { createDocument as apiCreateDoc, updateDocument as apiUpdateDoc, fetchDocument as apiFetchDoc } from '../api/client';
 import { usePageStore } from './page-store';
 
@@ -518,24 +518,51 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       return { newCursorPosition: selection.anchor };
     }
 
+    // ── Capture pre-deletion state for undo ──────────────────────
+    const { start, end } = getSelectionRange(selection, document);
+    const allBlocks = getBlockNodes(document);
+    const startBlockIdx = allBlocks.findIndex((b) => b.id === start.nodeId);
+    const endBlockIdx = allBlocks.findIndex((b) => b.id === end.nodeId);
+
+    let snapshotBlocks: BlockNode[] = [];
+    let firstBlockId = '';
+    let prevBlockId: string | null = null;
+
+    if (startBlockIdx >= 0 && endBlockIdx >= 0) {
+      const minIdx = Math.min(startBlockIdx, endBlockIdx);
+      const maxIdx = Math.max(startBlockIdx, endBlockIdx);
+
+      // Clone affected blocks while they still have their original content
+      const docChildren = document.children;
+      const childStartIdx = docChildren.findIndex((c) => c.id === allBlocks[minIdx].id);
+      const childEndIdx = docChildren.findIndex((c) => c.id === allBlocks[maxIdx].id);
+      if (childStartIdx >= 0 && childEndIdx >= 0) {
+        const cMin = Math.min(childStartIdx, childEndIdx);
+        const cMax = Math.max(childStartIdx, childEndIdx);
+        snapshotBlocks = docChildren.slice(cMin, cMax + 1).map((b) => JSON.parse(JSON.stringify(b)));
+        firstBlockId = snapshotBlocks[0].id;
+        // Block immediately before the range, or null if at start
+        prevBlockId = cMin > 0 ? docChildren[cMin - 1].id : null;
+      }
+    }
+
+    // ── Apply deletion ──────────────────────────────────────────
     const result = deleteSelection(docClone, selection);
 
+    // ── Store snapshot so undo can restore ──────────────────────
     const entry: HistoryEntry = {
       id: `h-${now}`,
       timestamp: now,
-      forward: [{
-        type: 'deleteText',
-        blockId: selection.anchor.nodeId,
-        offset: selection.anchor.offset,
-        text: '',
-      }],
-      inverse: [{
-        type: 'insertText',
-        blockId: selection.anchor.nodeId,
-        offset: selection.anchor.offset,
-        text: '',
-      }],
+      forward: [],
+      inverse: [],
       description: 'Delete selection',
+      selectionDelete: snapshotBlocks.length > 0 ? {
+        blocks: snapshotBlocks,
+        firstBlockId,
+        prevBlockId,
+        anchor: { nodeId: selection.anchor.nodeId, offset: selection.anchor.offset },
+        focus: { nodeId: selection.focus.nodeId, offset: selection.focus.offset },
+      } : undefined,
     };
 
     const newHistory = history.slice(0, historyIndex + 1);
@@ -1282,37 +1309,65 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     if (historyIndex < 0) return null;
 
     const entry = history[historyIndex];
-
-    // Apply inverse operations in reverse order
-    for (let i = entry.inverse.length - 1; i >= 0; i--) {
-      const op = entry.inverse[i];
-      applyOperation(docClone, op);
-    }
-
-    // Calculate cursor position from the first inverse operation
-    const firstInverse = entry.inverse[0];
     let cursorPos = { nodeId: '', offset: 0 };
 
-    if (firstInverse.type === 'insertText') {
+    // ── Selection-delete snapshot: restore original blocks ──────
+    if (entry.selectionDelete) {
+      const sd = entry.selectionDelete;
+      const firstIdx = docClone.children.findIndex((c) => c.id === sd.firstBlockId);
+
+      if (firstIdx >= 0) {
+        // First block was truncated — replace it with all original blocks
+        docClone.children.splice(firstIdx, 1, ...sd.blocks);
+      } else if (sd.prevBlockId) {
+        // First block was removed — insert after previous block
+        const prevIdx = docClone.children.findIndex((c) => c.id === sd.prevBlockId);
+        if (prevIdx >= 0) {
+          docClone.children.splice(prevIdx + 1, 0, ...sd.blocks);
+        } else {
+          // Fallback: prepend
+          docClone.children.unshift(...sd.blocks);
+        }
+      } else {
+        // No prevBlockId and first block is gone — prepend
+        docClone.children.unshift(...sd.blocks);
+      }
+
       cursorPos = {
-        nodeId: firstInverse.blockId,
-        offset: (firstInverse as InsertTextOp).offset,
+        nodeId: sd.anchor.nodeId,
+        offset: sd.anchor.offset,
       };
-    } else if (firstInverse.type === 'deleteText') {
-      cursorPos = {
-        nodeId: firstInverse.blockId,
-        offset: (firstInverse as DeleteTextOp).offset,
-      };
-    } else if (firstInverse.type === 'mergeBlocks') {
-      cursorPos = {
-        nodeId: firstInverse.blockId,
-        offset: 0,
-      };
-    } else if (firstInverse.type === 'splitBlock') {
-      cursorPos = {
-        nodeId: firstInverse.blockId,
-        offset: (firstInverse as SplitBlockOp).offset,
-      };
+    } else {
+      // ── Operation-based undo ──────────────────────────────────
+      for (let i = entry.inverse.length - 1; i >= 0; i--) {
+        const op = entry.inverse[i];
+        applyOperation(docClone, op);
+      }
+
+      const firstInverse = entry.inverse[0];
+      if (firstInverse) {
+        if (firstInverse.type === 'insertText') {
+          cursorPos = {
+            nodeId: firstInverse.blockId,
+            offset: (firstInverse as InsertTextOp).offset,
+          };
+        } else if (firstInverse.type === 'deleteText') {
+          cursorPos = {
+            nodeId: firstInverse.blockId,
+            offset: (firstInverse as DeleteTextOp).offset,
+          };
+        } else if (firstInverse.type === 'mergeBlocks') {
+          cursorPos = {
+            nodeId: firstInverse.blockId,
+            offset: 0,
+          };
+        } else if (firstInverse.type === 'splitBlock') {
+          cursorPos = {
+            nodeId: firstInverse.blockId,
+            offset: (firstInverse as SplitBlockOp).offset,
+          };
+        }
+      }
     }
 
     set({
@@ -1329,37 +1384,48 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     if (historyIndex >= history.length - 1) return null;
 
     const entry = history[historyIndex + 1];
-
-    // Apply forward operations
-    for (const op of entry.forward) {
-      applyOperation(docClone, op);
-    }
-
-    // Calculate cursor position from the first forward operation
-    const firstForward = entry.forward[0];
     let cursorPos = { nodeId: '', offset: 0 };
 
-    if (firstForward.type === 'insertText') {
-      const insertOp = firstForward as InsertTextOp;
-      cursorPos = {
-        nodeId: insertOp.blockId,
-        offset: insertOp.offset + insertOp.text.length,
+    // ── Selection-delete snapshot: re-delete the same range ─────
+    if (entry.selectionDelete) {
+      const sd = entry.selectionDelete;
+      const selection: Selection = {
+        anchor: { nodeId: sd.anchor.nodeId, offset: sd.anchor.offset },
+        focus: { nodeId: sd.focus.nodeId, offset: sd.focus.offset },
       };
-    } else if (firstForward.type === 'deleteText') {
-      cursorPos = {
-        nodeId: firstForward.blockId,
-        offset: (firstForward as DeleteTextOp).offset,
-      };
-    } else if (firstForward.type === 'splitBlock') {
-      cursorPos = {
-        nodeId: (firstForward as SplitBlockOp).newBlockId,
-        offset: 0,
-      };
-    } else if (firstForward.type === 'mergeBlocks') {
-      cursorPos = {
-        nodeId: firstForward.blockId,
-        offset: 0,
-      };
+      const result = deleteSelection(docClone, selection);
+      cursorPos = result.newCursorPosition;
+    } else {
+      // ── Operation-based redo ──────────────────────────────────
+      for (const op of entry.forward) {
+        applyOperation(docClone, op);
+      }
+
+      const firstForward = entry.forward[0];
+      if (firstForward) {
+        if (firstForward.type === 'insertText') {
+          const insertOp = firstForward as InsertTextOp;
+          cursorPos = {
+            nodeId: insertOp.blockId,
+            offset: insertOp.offset + insertOp.text.length,
+          };
+        } else if (firstForward.type === 'deleteText') {
+          cursorPos = {
+            nodeId: firstForward.blockId,
+            offset: (firstForward as DeleteTextOp).offset,
+          };
+        } else if (firstForward.type === 'splitBlock') {
+          cursorPos = {
+            nodeId: (firstForward as SplitBlockOp).newBlockId,
+            offset: 0,
+          };
+        } else if (firstForward.type === 'mergeBlocks') {
+          cursorPos = {
+            nodeId: firstForward.blockId,
+            offset: 0,
+          };
+        }
+      }
     }
 
     set({

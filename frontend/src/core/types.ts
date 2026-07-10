@@ -382,6 +382,16 @@ export interface HistoryEntry {
   forward: Operation[];
   inverse: Operation[];
   description: string;
+  /** For complex operations (like deleteSelection) that can't be modeled
+   *  as simple operations. When present, undo/redo restore the original
+   *  blocks directly instead of applying inverse/forward ops. */
+  selectionDelete?: {
+    blocks: BlockNode[];  // clone of affected blocks (first to last)
+    firstBlockId: NodeId; // ID of the first affected block
+    prevBlockId: NodeId | null; // block before the range, null if at start
+    anchor: { nodeId: NodeId; offset: number };
+    focus: { nodeId: NodeId; offset: number };
+  };
 }
 
 // ============================================================
