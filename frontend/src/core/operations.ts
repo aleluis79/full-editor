@@ -451,7 +451,10 @@ function splitRunsAtRange(
 
   // Step 1: split the END run first (right side) — this does not
   // affect any indices to the left.
-  if (end.localOffset < block.children[end.runIndex].content.length) {
+  // Only split in the MIDDLE of a run — splitting at the boundary
+  // (localOffset=0 or localOffset=run.content.length) would create
+  // empty runs that get rendered as \u200B, inflating DOM offsets.
+  if (end.localOffset > 0 && end.localOffset < block.children[end.runIndex].content.length) {
     const run = block.children[end.runIndex];
     const before = createTextRun(
       run.content.slice(0, end.localOffset),
@@ -469,7 +472,7 @@ function splitRunsAtRange(
 
   // Step 2: split the START run — this shifts everything to the
   // right by 1, including end.runIndex.
-  if (start.localOffset > 0) {
+  if (start.localOffset > 0 && start.localOffset < block.children[start.runIndex].content.length) {
     const run = block.children[start.runIndex];
     const before = createTextRun(
       run.content.slice(0, start.localOffset),
