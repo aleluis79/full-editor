@@ -140,6 +140,40 @@ export function getPointFromOffset(
 }
 
 /**
+ * Convert a DOM node and character offset to a logical position
+ * (nodeId + offset) within the document. Used to translate native
+ * browser selection ranges to the editor's logical coordinate system.
+ */
+export function nodeToLogicalPosition(
+  node: Node,
+  offset: number
+): { nodeId: string; offset: number } | null {
+  const nodeId = findBlockId(node);
+  if (!nodeId) return null;
+
+  const blockEl = document.querySelector(
+    `[data-block-id="${nodeId}"]`
+  ) as HTMLElement | null;
+  if (!blockEl) return null;
+
+  // Walk text nodes inside the block to compute the concatenated offset
+  let globalOffset = 0;
+  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
+  let textNode: Text | null;
+
+  while ((textNode = walker.nextNode() as Text | null)) {
+    if (textNode === node) {
+      return { nodeId, offset: globalOffset + offset };
+    }
+    globalOffset += textNode.length;
+  }
+
+  // If the node is the block element itself or a non-text child,
+  // use the block-relative position
+  return { nodeId, offset: globalOffset };
+}
+
+/**
  * Given a viewport point, find the block element and character offset
  * in the document. Works across blocks — if the point lands in a
  * different block, returns that block's ID and offset.

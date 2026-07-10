@@ -12,7 +12,7 @@ import {
   clampCursor,
 } from '../core/cursor';
 import { selectWord, selectParagraph, getSelectedText, getSelectionRange } from '../core/selection';
-import { getOffsetFromPoint, getPointFromOffset, hitTest } from '../core/interaction';
+import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition } from '../core/interaction';
 import { DocumentView } from './DocumentView';
 import { CursorOverlay } from './Cursor';
 import { SelectionOverlay } from './SelectionOverlay';
@@ -585,6 +585,47 @@ export function Editor() {
       paginate(layout);
     }
   }, [layout, paginate]);
+
+  // Sync browser native selection to editor state — without this, text
+  // selected by mouse drag is invisible to the toolbar and keyboard
+  // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
+  // Zustand never gets updated for mouse interactions.
+  useEffect(() => {
+    const handler = () => {
+      const sel = window.getSelection();
+      if (!sel) return;
+
+      // Ignore selections outside the editor blocks
+      const anchorPos = sel.anchorNode
+        ? nodeToLogicalPosition(sel.anchorNode, sel.anchorOffset)
+        : null;
+      if (!anchorPos) return;
+
+      // Clamp to document model — the DOM may have \u200B placeholders
+      // that inflate offsets beyond the actual text content.
+      const doc = useDocumentStore.getState().document;
+      const clampedAnchor = clampCursor(doc, { position: anchorPos }).position;
+
+      if (sel.isCollapsed) {
+        // Pure cursor movement — update cursor position only
+        setCursorPosition(clampedAnchor);
+        clearSelection();
+      } else {
+        // Real selection — update both cursor and selection
+        const focusPos = sel.focusNode
+          ? nodeToLogicalPosition(sel.focusNode, sel.focusOffset)
+          : null;
+        if (!focusPos) return;
+
+        const clampedFocus = clampCursor(doc, { position: focusPos }).position;
+        setSelection({ anchor: clampedAnchor, focus: clampedFocus });
+        setCursorPosition(clampedFocus);
+      }
+    };
+
+    document.addEventListener('selectionchange', handler);
+    return () => document.removeEventListener('selectionchange', handler);
+  }, [setCursorPosition, setSelection, clearSelection]);
 
   return (
     <div className="editor" ref={containerRef}>

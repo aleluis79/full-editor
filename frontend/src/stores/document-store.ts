@@ -494,7 +494,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       endOffset,
     };
 
-    applyToggleMark(document, op);
+    applyToggleMark(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -529,7 +529,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       endOffset,
     };
 
-    applySetStyle(document, op);
+    applySetStyle(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -563,7 +563,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       attrs,
     };
 
-    applyInsertBlock(document, op);
+    applyInsertBlock(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -584,7 +584,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     });
 
     // Return the ID of the newly inserted block
-    const blocks = getBlockNodes(document);
+    const blocks = getBlockNodes(docClone);
     const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
     return afterIndex >= 0 && afterIndex < blocks.length - 1
       ? blocks[afterIndex + 1].id
@@ -596,7 +596,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     const docClone = cloneDocument(document);
     const now = Date.now();
 
-    const block = findNode(document, blockId);
+    const block = findNode(docClone, blockId);
     if (!block) return;
 
     const op: ConvertBlockOp = {
@@ -607,7 +607,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       attrs,
     };
 
-    applyConvertBlock(document, op);
+    applyConvertBlock(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -644,7 +644,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       inline,
     };
 
-    applyInsertImage(document, op);
+    applyInsertImage(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -665,7 +665,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     });
 
     // Return the ID of the newly inserted image
-    const blocks = getBlockNodes(document);
+    const blocks = getBlockNodes(docClone);
     const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
     return afterIndex >= 0 && afterIndex < blocks.length - 1
       ? blocks[afterIndex + 1].id
@@ -684,7 +684,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       height,
     };
 
-    applyResizeImage(document, op);
+    applyResizeImage(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -718,7 +718,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       cols,
     };
 
-    applyInsertTable(document, op);
+    applyInsertTable(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -739,7 +739,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     });
 
     // Return the ID of the newly inserted table
-    const blocks = getBlockNodes(document);
+    const blocks = getBlockNodes(docClone);
     const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
     return afterIndex >= 0 && afterIndex < blocks.length - 1
       ? blocks[afterIndex + 1].id
@@ -758,7 +758,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       afterRowIndex,
     };
 
-    applyAddTableRow(document, op);
+    applyAddTableRow(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -791,7 +791,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       afterColumnIndex,
     };
 
-    applyAddTableColumn(document, op);
+    applyAddTableColumn(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -825,7 +825,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       deletedRow: createTableRow(),
     };
 
-    applyDeleteTableRow(document, op);
+    applyDeleteTableRow(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -859,7 +859,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       deletedCells: [],
     };
 
-    applyDeleteTableColumn(document, op);
+    applyDeleteTableColumn(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -895,7 +895,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       endCol,
     };
 
-    applyMergeTableCells(document, op);
+    applyMergeTableCells(docClone, op);
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -926,7 +926,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     // Apply inverse operations in reverse order
     for (let i = entry.inverse.length - 1; i >= 0; i--) {
       const op = entry.inverse[i];
-      applyOperation(document, op);
+      applyOperation(docClone, op);
     }
 
     // Calculate cursor position from the first inverse operation
@@ -972,7 +972,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
     // Apply forward operations
     for (const op of entry.forward) {
-      applyOperation(document, op);
+      applyOperation(docClone, op);
     }
 
     // Calculate cursor position from the first forward operation
