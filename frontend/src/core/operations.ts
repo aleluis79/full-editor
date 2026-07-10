@@ -422,6 +422,76 @@ export function invertOperation(op: Operation): Operation {
 // ToggleMark Operation
 // ============================================================
 
+/**
+ * Split runs at the selection boundaries so that the selected range
+ * aligns exactly with run boundaries. Returns the (start, end) run
+ * indices for the range that should receive the mark.
+ *
+ * Splits from RIGHT to LEFT so earlier indices don't shift.
+ */
+function splitRunsAtRange(
+  block: Paragraph | Heading,
+  startOffset: number,
+  endOffset: number
+): { startRunIndex: number; endRunIndex: number } {
+  if (startOffset === endOffset) {
+    // No selection — nothing to split
+    return { startRunIndex: -1, endRunIndex: -1 };
+  }
+
+  let start = findRunAtOffset(block, startOffset);
+  let end = findRunAtOffset(block, endOffset);
+
+  // Bail if both point into the same run without needing a split
+  // (both at run boundaries)
+  if (start.runIndex === end.runIndex && start.localOffset === 0 &&
+      end.localOffset === block.children[end.runIndex].content.length) {
+    return { startRunIndex: start.runIndex, endRunIndex: end.runIndex };
+  }
+
+  // Step 1: split the END run first (right side) — this does not
+  // affect any indices to the left.
+  if (end.localOffset < block.children[end.runIndex].content.length) {
+    const run = block.children[end.runIndex];
+    const before = createTextRun(
+      run.content.slice(0, end.localOffset),
+      [...run.marks]
+    );
+    before.attrs = run.attrs ? { ...run.attrs } : undefined;
+    const after = createTextRun(
+      run.content.slice(end.localOffset),
+      [...run.marks]
+    );
+    after.attrs = run.attrs ? { ...run.attrs } : undefined;
+    block.children.splice(end.runIndex, 1, before, after);
+    // end.runIndex still points to the "before" part
+  }
+
+  // Step 2: split the START run — this shifts everything to the
+  // right by 1, including end.runIndex.
+  if (start.localOffset > 0) {
+    const run = block.children[start.runIndex];
+    const before = createTextRun(
+      run.content.slice(0, start.localOffset),
+      [...run.marks]
+    );
+    before.attrs = run.attrs ? { ...run.attrs } : undefined;
+    const contentAfter = createTextRun(
+      run.content.slice(start.localOffset),
+      [...run.marks]
+    );
+    contentAfter.attrs = run.attrs ? { ...run.attrs } : undefined;
+    block.children.splice(start.runIndex, 1, before, contentAfter);
+
+    // Start of selection is now at the "after" part
+    start.runIndex++;
+    // End shifted right by 1
+    end.runIndex++;
+  }
+
+  return { startRunIndex: start.runIndex, endRunIndex: end.runIndex };
+}
+
 export function applyToggleMark(doc: DocumentRoot, op: ToggleMarkOp): void {
   const block = findNode(doc, op.blockId);
   if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
@@ -429,21 +499,26 @@ export function applyToggleMark(doc: DocumentRoot, op: ToggleMarkOp): void {
   }
 
   const textBlock = block as Paragraph | Heading;
-  const start = findRunAtOffset(textBlock, op.startOffset);
-  const end = findRunAtOffset(textBlock, op.endOffset);
+
+  // No selection range — nothing to toggle
+  if (op.startOffset === op.endOffset) return;
+
+  // Split runs so the selection aligns with run boundaries
+  const { startRunIndex, endRunIndex } = splitRunsAtRange(
+    textBlock, op.startOffset, op.endOffset
+  );
+  if (startRunIndex < 0) return;
 
   // Determine if we're adding or removing the mark
-  const firstRun = textBlock.children[start.runIndex];
+  const firstRun = textBlock.children[startRunIndex];
   const hasMark = firstRun.marks.includes(op.mark);
 
-  // Apply or remove mark from affected runs
-  for (let i = start.runIndex; i <= end.runIndex; i++) {
+  // Apply or remove mark from the exact runs covering the selection
+  for (let i = startRunIndex; i <= endRunIndex; i++) {
     const run = textBlock.children[i];
     if (hasMark) {
-      // Remove mark
       run.marks = run.marks.filter((m) => m !== op.mark);
     } else {
-      // Add mark
       if (!run.marks.includes(op.mark)) {
         run.marks.push(op.mark);
       }
@@ -467,11 +542,18 @@ export function applySetStyle(doc: DocumentRoot, op: SetStyleOp): void {
   }
 
   const textBlock = block as Paragraph | Heading;
-  const start = findRunAtOffset(textBlock, op.startOffset);
-  const end = findRunAtOffset(textBlock, op.endOffset);
 
-  // Apply style to affected runs
-  for (let i = start.runIndex; i <= end.runIndex; i++) {
+  // No selection range — nothing to style
+  if (op.startOffset === op.endOffset) return;
+
+  // Split runs so the selection aligns with run boundaries
+  const { startRunIndex, endRunIndex } = splitRunsAtRange(
+    textBlock, op.startOffset, op.endOffset
+  );
+  if (startRunIndex < 0) return;
+
+  // Apply style to the exact runs covering the selection
+  for (let i = startRunIndex; i <= endRunIndex; i++) {
     const run = textBlock.children[i];
     if (!run.attrs) {
       run.attrs = {};
@@ -911,7 +993,13 @@ function findRunAtOffset(
 
   for (let i = 0; i < block.children.length; i++) {
     const run = block.children[i];
-    if (offset <= accumulated + run.content.length) {
+    // Strict less-than so offsets exactly at the boundary between two
+    // runs fall through to the NEXT run. Required for correct deletion:
+    // with <=, `findRunAtOffset(block, 6)` on ["Hello ", "World"] returns
+    // run0 with localOffset=6 (past-the-end), and applyDeleteText silently
+    // deletes nothing. With <, it returns run1 with localOffset=0, deleting
+    // the first character of "World" as expected.
+    if (offset < accumulated + run.content.length) {
       return {
         runIndex: i,
         localOffset: offset - accumulated,

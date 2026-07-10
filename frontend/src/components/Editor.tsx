@@ -52,6 +52,12 @@ export function Editor() {
   // the cursor at the exact clicked character.
   const handleBlockClick = useCallback(
     (blockId: string, clientX: number, clientY: number) => {
+      // If the browser has a non-collapsed native selection, the user
+      // just finished a drag-select. Don't steal the selection by
+      // focusing the textarea — the blue highlight would disappear.
+      const nativeSel = window.getSelection();
+      if (nativeSel && !nativeSel.isCollapsed) return;
+
       const blockEl = document.querySelector(
         `[data-block-id="${blockId}"]`
       ) as HTMLElement | null;
