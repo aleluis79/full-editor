@@ -1,111 +1,560 @@
+/* ============================================================
+   Full Editor — Base Styles
+   ============================================================ */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --page-width: 816px; /* 8.5 inches at 96dpi */
+  --page-height: 1056px; /* 11 inches at 96dpi */
+  --page-margin: 96px; /* 1 inch */
+  --font-family: 'Georgia', 'Times New Roman', serif;
+  --font-size: 16px;
+  --line-height: 1.5;
+  --color-text: #1a1a1a;
+  --color-bg: #f5f5f5;
+  --color-page: #ffffff;
+  --color-cursor: #000000;
+  --color-selection: rgba(0, 120, 215, 0.3);
+  --color-active-border: #0078d4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+* {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
 body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ============================================================
+   App Layout
+   ============================================================ */
+
+.app {
+  display: flex;
+  justify-content: center;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+
+/* ============================================================
+   Editor
+   ============================================================ */
+
+.editor {
+  position: relative;
+  width: var(--page-width);
+}
+
+/* Hidden textarea for keyboard capture */
+.hidden-textarea {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Document View
+   ============================================================ */
+
+.document-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+.page {
+  background: var(--color-page);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.page-virtualized {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ============================================================
+   Page
+   ============================================================ */
+
+.page {
+  width: var(--page-width);
+  min-height: var(--page-height);
+  background: var(--color-page);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.page-content {
+  width: calc(var(--page-width) - var(--page-margin) * 2);
+  margin: 0 auto;
+  padding: var(--page-margin) 0;
+  min-height: calc(var(--page-height) - var(--page-margin) * 2);
+  position: relative;
+}
+
+/* ============================================================
+   Paragraph
+   ============================================================ */
+
+.paragraph {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  color: var(--color-text);
+  margin-bottom: 0.5em;
+  cursor: text;
+  min-height: 1.5em;
+  position: relative;
+  max-width: calc(var(--page-width) - var(--page-margin) * 2 - 100px);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.paragraph:hover {
+  background: rgba(0, 120, 215, 0.03);
+}
+
+.paragraph.active {
+  background: rgba(0, 120, 215, 0.05);
+}
+
+/* ============================================================
+   Headings
+   ============================================================ */
+
+.heading-1 {
+  font-size: 2em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  line-height: 1.2;
+}
+
+.heading-2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 0.4em;
+  line-height: 1.3;
+}
+
+.heading-3 {
+  font-size: 1.25em;
+  font-weight: bold;
+  margin-bottom: 0.3em;
+  line-height: 1.3;
+}
+
+/* ============================================================
+   Lists
+   ============================================================ */
+
+.list-block {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.list-block ol,
+.list-block ul {
   margin: 0;
+  padding-left: 1.5em;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+.list-item {
+  margin: 0.25em 0;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+.list-item .paragraph {
+  margin-bottom: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
+/* ============================================================
+   Blockquote
+   ============================================================ */
+
+.blockquote-block {
+  margin: 0.5em 0;
+  padding: 0.5em 1em;
+  border-left: 4px solid #ccc;
+  background: #f9f9f9;
+  color: #666;
+}
+
+.blockquote-block .paragraph {
+  margin-bottom: 0;
+  font-style: italic;
+}
+
+/* ============================================================
+   Horizontal Rule
+   ============================================================ */
+
+.horizontal-rule {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 1em 0;
+}
+
+/* ============================================================
+   Text Runs
+   ============================================================ */
+
+.text-run {
+  white-space: pre-wrap;
+}
+
+/* ============================================================
+   Cursor Overlay
+   ============================================================ */
+
+.cursor-overlay {
+  position: absolute;
+  width: 2px;
+  height: 1.2em;
+  background: var(--color-cursor);
+  pointer-events: none;
+  z-index: 10;
+  animation: cursor-blink 1.06s step-end infinite;
+}
+
+.editor-cursor {
+  position: absolute;
+  width: 2px;
+  height: 1.2em;
+  background: #000;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.editor-cursor-inline {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: #000;
+  vertical-align: text-bottom;
+  animation: cursor-blink 1.06s step-end infinite;
+  margin-left: -1px;
+  margin-right: -1px;
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ============================================================
+   Selection (Phase 2 placeholder)
+   ============================================================ */
+
+.selection-highlight {
+  background: var(--color-selection);
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Toolbar
+   ============================================================ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
   border-radius: 4px;
-  color: var(--text-h);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #d0d0d0;
+  margin: 0 4px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+  border-color: #d0d0d0;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn:active:not(:disabled) {
+  background: #d0d0d0;
+}
+
+.toolbar-select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  background: white;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.toolbar-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-select-small {
+  width: 60px;
+}
+
+.toolbar-color-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+.toolbar-color-label:hover {
+  background: #e8e8e8;
+  border-color: #d0d0d0;
+}
+
+.toolbar-color-input {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 4px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.toolbar-color-label:hover .toolbar-color-input {
+  opacity: 1;
+}
+
+/* ============================================================
+   Image Block
+   ============================================================ */
+
+.image-block {
+  position: relative;
+  display: inline-block;
+  border: 2px solid transparent;
+  border-radius: 2px;
+  transition: border-color 0.1s;
+}
+
+.image-block:hover {
+  border-color: rgba(0, 120, 215, 0.3);
+}
+
+.image-block.active {
+  border-color: var(--color-active-border);
+}
+
+.image-block img {
+  display: block;
+}
+
+/* ============================================================
+   Resize Handles
+   ============================================================ */
+
+.resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: white;
+  border: 1px solid #0078d4;
+  border-radius: 2px;
+}
+
+.resize-handle-n {
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.resize-handle-s {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.resize-handle-e {
+  top: 50%;
+  right: -4px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.resize-handle-w {
+  top: 50%;
+  left: -4px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.resize-handle-ne {
+  top: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+
+.resize-handle-nw {
+  top: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+
+.resize-handle-se {
+  bottom: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+
+.resize-handle-sw {
+  bottom: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+
+/* ============================================================
+   Table Block
+   ============================================================ */
+
+.table-block {
+  margin: 1em 0;
+}
+
+.table-grid {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table-grid th,
+.table-grid td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table-grid th {
+  background: #f5f5f5;
+  font-weight: bold;
+}
+
+.table-header-cell {
+  position: relative;
+}
+
+.colspan-indicator {
+  font-size: 10px;
+  color: #999;
+  font-weight: normal;
+}
+
+.table-cell {
+  position: relative;
+}
+
+.table-cell.active {
+  background: rgba(0, 120, 215, 0.05);
+}
+
+.table-cell-content {
+  min-height: 1.5em;
+  cursor: text;
+}
+
+.table-actions-cell,
+.table-row-actions-cell {
+  width: 40px;
+  text-align: center;
+  border: none;
+  padding: 4px;
+}
+
+.table-action-btn {
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
   padding: 4px 8px;
-  background: var(--code-bg);
+  font-size: 12px;
+  color: #666;
+}
+
+.table-action-btn:hover {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.table-action-btn-small {
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.table-row-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.table-row-actions .table-action-btn {
+  font-size: 12px;
 }
