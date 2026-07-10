@@ -14,6 +14,7 @@ import type {
   MergeBlocksOp,
   ToggleMarkOp,
   SetStyleOp,
+  SetBlockAttrsOp,
   InsertBlockOp,
   ConvertBlockOp,
   DeleteBlockOp,
@@ -307,6 +308,10 @@ export function applyOperation(doc: DocumentRoot, op: Operation): NodeId | null 
       applySetStyle(doc, op);
       return null;
 
+    case 'setBlockAttrs':
+      applySetBlockAttrs(doc, op);
+      return null;
+
     case 'insertBlock':
       applyInsertBlock(doc, op);
       return null;
@@ -379,6 +384,9 @@ export function invertOperation(op: Operation): Operation {
 
     case 'setStyle':
       return invertSetStyle(op);
+
+    case 'setBlockAttrs':
+      return invertSetBlockAttrs(op);
 
     case 'insertBlock':
       return invertInsertBlock(op);
@@ -609,6 +617,29 @@ export function invertSetStyle(op: SetStyleOp): SetStyleOp {
   return {
     ...op,
     value: undefined,
+  };
+}
+
+// ============================================================
+// SetBlockAttrs Operation (alignment, etc.)
+// ============================================================
+
+export function applySetBlockAttrs(doc: DocumentRoot, op: SetBlockAttrsOp): void {
+  const block = findNode(doc, op.blockId);
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    throw new Error(`Block ${op.blockId} not found or is not a text block`);
+  }
+
+  const textBlock = block as Paragraph | Heading;
+  textBlock.attrs = { ...(textBlock.attrs || {}), ...op.attrs };
+}
+
+export function invertSetBlockAttrs(op: SetBlockAttrsOp): SetBlockAttrsOp {
+  return {
+    type: 'setBlockAttrs',
+    blockId: op.blockId,
+    attrs: op.prevAttrs,
+    prevAttrs: op.attrs,
   };
 }
 

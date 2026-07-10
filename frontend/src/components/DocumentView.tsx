@@ -156,6 +156,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
           left: page.contentArea.x,
           width: page.contentArea.width,
           height: page.contentArea.height,
+          padding: 0,
         }}
       >
         {page.blocks.map((blockLayout) => {
@@ -533,6 +534,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
         position: 'relative',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
+        textAlign: block.attrs?.textAlign ?? 'left',
       }}
     >
       {renderTextContent()}

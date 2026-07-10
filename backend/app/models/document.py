@@ -1,27 +1,39 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
+"""Document SQLAlchemy model and Pydantic schemas."""
+import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import String, Text, DateTime
+from sqlalchemy.orm import Mapped, mapped_column
 
-class Document(BaseModel):
-    """Document model for storing editor documents."""
-    
-    id: Optional[str] = None
-    title: str = "Untitled Document"
-    content: dict = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    def get_content_dict(self) -> dict:
-        """Get content as dict."""
-        return self.content
-    
-    def set_content_dict(self, content: dict) -> None:
-        """Set content from dict."""
-        self.content = content
+from ..core.database import Base
 
 
-# Pydantic schemas for API
+def _generate_id() -> str:
+    return str(uuid.uuid4())
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class DocumentModel(Base):
+    """SQLAlchemy model for persisted documents."""
+
+    __tablename__ = "documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_generate_id)
+    title: Mapped[str] = mapped_column(String(255), default="Untitled Document")
+    content: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
+# ── Pydantic schemas for the API ──────────────────────────────────
+
+from pydantic import BaseModel, Field
+
+
 class DocumentCreate(BaseModel):
     """Schema for creating a document."""
     title: str = "Untitled Document"

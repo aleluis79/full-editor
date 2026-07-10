@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading } from '../core/types';
 import {
   createDocument,
   createParagraph,
@@ -16,6 +16,7 @@ import {
   applyMergeBlocks,
   applyToggleMark,
   applySetStyle,
+  applySetBlockAttrs,
   applyClearFormatting,
   applyInsertBlock,
   applyConvertBlock,
@@ -31,6 +32,8 @@ import {
   applyOperation,
 } from '../core/operations';
 import { deleteSelection, isSelectionEmpty } from '../core/selection';
+import { createDocument as apiCreateDoc, updateDocument as apiUpdateDoc, fetchDocument as apiFetchDoc } from '../api/client';
+import { usePageStore } from './page-store';
 
 // ============================================================
 // Batch Configuration
@@ -38,6 +41,19 @@ import { deleteSelection, isSelectionEmpty } from '../core/selection';
 
 const BATCH_TIMEOUT_MS = 300; // Max time between keystrokes to batch
 const MAX_HISTORY_ENTRIES = 500;
+
+const SAVE_DEBOUNCE_MS = 2000;
+
+// ── helper: mark document dirty on every mutation ───────────────
+
+function docSet(set: any, state: Partial<DocumentState>) {
+  // Only mark dirty when the document itself changes
+  if ('document' in state) {
+    set({ ...state, isDirty: true });
+  } else {
+    set(state);
+  }
+}
 
 // ============================================================
 // Document Store
@@ -50,7 +66,20 @@ interface DocumentState {
   batchTimeout: ReturnType<typeof setTimeout> | null;
   lastOperationTime: number;
 
+  // Document management
+  currentDocId: string | null;
+  documentTitle: string;
+  isDirty: boolean;
+  isSaving: boolean;
+  isEditorReady: boolean;
+
   // Actions
+  setDocumentTitle: (title: string) => void;
+  markDirty: () => void;
+  newDocument: () => Promise<string>;
+  loadDocument: (id: string) => Promise<void>;
+  saveDocument: () => Promise<void>;
+  resetEditor: () => void;
   insertText: (blockId: NodeId, offset: number, text: string) => void;
   deleteText: (blockId: NodeId, offset: number, direction: 'backward' | 'forward') => void;
   splitBlock: (blockId: NodeId, offset: number) => NodeId | null;
@@ -60,6 +89,7 @@ interface DocumentState {
   toggleMark: (blockId: NodeId, startOffset: number, endOffset: number, mark: MarkType) => void;
   setStyle: (blockId: NodeId, startOffset: number, endOffset: number, key: keyof StyleAttrs, value: string | number | undefined) => void;
   clearFormatting: (blockId: NodeId, startOffset: number, endOffset: number) => void;
+  setBlockAttrs: (blockId: NodeId, attrs: BlockAttrs) => void;
   insertBlock: (afterBlockId: NodeId, blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => NodeId;
   convertBlock: (blockId: NodeId, toType: BlockType, attrs?: Record<string, unknown>) => void;
   insertImage: (afterBlockId: NodeId, src: string, alt?: string, width?: number, height?: number, inline?: boolean) => NodeId;
@@ -77,12 +107,130 @@ interface DocumentState {
   flushBatch: () => void;
 }
 
-export const useDocumentStore = create<DocumentState>((set, get) => ({
+export const useDocumentStore = create<DocumentState>((_set, get) => {
+  // Wrap _set to auto-mark dirty when the document tree changes
+  const set = (partial: Partial<DocumentState>) => {
+    if ('document' in partial && 'isDirty' in partial === false) {
+      _set({ ...partial, isDirty: true });
+    } else {
+      _set(partial);
+    }
+  };
+
+  return {
   document: createDocument([createParagraph('')]),
   history: [],
   historyIndex: -1,
   batchTimeout: null,
   lastOperationTime: 0,
+
+  // Document management
+  currentDocId: null,
+  documentTitle: 'Untitled Document',
+  isDirty: false,
+  isSaving: false,
+  isEditorReady: false,
+
+  setDocumentTitle: (title) => {
+    set({ documentTitle: title, isDirty: true });
+  },
+
+  markDirty: () => {
+    set({ isDirty: true });
+  },
+
+  newDocument: async () => {
+    try {
+      const title = 'Untitled Document';
+      const pageConfig = usePageStore.getState().config;
+      const content = {
+        blocks: [createParagraph('')],
+        config: {
+          paperSize: pageConfig.paperSize,
+          margins: pageConfig.margins,
+        },
+      };
+      const doc = await apiCreateDoc({ title, content: content as any });
+      set({
+        currentDocId: doc.id,
+        documentTitle: doc.title,
+        document: createDocument([createParagraph('')]),
+        history: [],
+        historyIndex: -1,
+        isDirty: false,
+        isSaving: false,
+        isEditorReady: true,
+      });
+      return doc.id;
+    } catch (err) {
+      console.error('Failed to create document:', err);
+      throw err;
+    }
+  },
+
+  loadDocument: async (id) => {
+    try {
+      const doc = await apiFetchDoc(id);
+      const content = doc.content as Record<string, unknown> | undefined;
+      const blocks = (content?.blocks as any[]) ?? [createParagraph('')];
+      const savedConfig = content?.config as Record<string, unknown> | undefined;
+
+      // Restore saved page config
+      if (savedConfig?.paperSize && savedConfig?.margins) {
+        usePageStore.getState().updatePaperSize(savedConfig.paperSize as any);
+      }
+
+      set({
+        currentDocId: doc.id,
+        documentTitle: doc.title,
+        document: createDocument(blocks),
+        history: [],
+        historyIndex: -1,
+        isDirty: false,
+        isSaving: false,
+        isEditorReady: true,
+      });
+    } catch (err) {
+      console.error('Failed to load document:', err);
+      throw err;
+    }
+  },
+
+  saveDocument: async () => {
+    const { currentDocId, document, documentTitle } = get();
+    if (!currentDocId) return;
+
+    set({ isSaving: true });
+    try {
+      const pageConfig = usePageStore.getState().config;
+      const content = {
+        blocks: document.children,
+        config: {
+          paperSize: pageConfig.paperSize,
+          margins: pageConfig.margins,
+        },
+      };
+      await apiUpdateDoc(currentDocId, { title: documentTitle, content: content as any });
+      set({ isDirty: false, isSaving: false });
+    } catch (err) {
+      console.error('Failed to save document:', err);
+      set({ isSaving: false });
+      throw err;
+    }
+  },
+
+  resetEditor: () => {
+    set({
+      currentDocId: null,
+      documentTitle: 'Untitled Document',
+      document: createDocument([createParagraph('')]),
+      history: [],
+      historyIndex: -1,
+      isDirty: false,
+      isSaving: false,
+      isEditorReady: false,
+    });
+  },
 
   insertText: (blockId, offset, text) => {
     const { document, history, historyIndex, lastOperationTime } = get();
@@ -582,6 +730,47 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     });
   },
 
+  setBlockAttrs: (blockId, attrs) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    // Capture previous attrs for undo
+    const block = findNode(docClone, blockId) as Paragraph | Heading | null;
+    const prevAttrs = block?.attrs ?? {};
+
+    const op: SetBlockAttrsOp = {
+      type: 'setBlockAttrs',
+      blockId,
+      attrs,
+      prevAttrs,
+    };
+
+    applySetBlockAttrs(docClone, op);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [op],
+      inverse: [invertOperation(op)],
+      description: attrs.textAlign ? `Align ${attrs.textAlign}` : 'Set block attrs',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    if (newHistory.length > MAX_HISTORY_ENTRIES) {
+      newHistory.splice(0, newHistory.length - MAX_HISTORY_ENTRIES);
+    }
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
   insertBlock: (afterBlockId, blockType, attrs) => {
     const { document, history, historyIndex } = get();
     const docClone = cloneDocument(document);
@@ -1062,4 +1251,5 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       set({ batchTimeout: null });
     }
   },
-}));
+};
+});

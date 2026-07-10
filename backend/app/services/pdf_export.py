@@ -25,6 +25,30 @@ PAPER_SIZES = {
 }
 
 
+# ── Font family mapping (common to ReportLab PDF fonts) ────────
+_REPORTLAB_FONTS = {
+    "Helvetica": "Helvetica",
+    "Arial": "Helvetica",
+    "Verdana": "Helvetica",
+    "Tahoma": "Helvetica",
+    "Trebuchet MS": "Helvetica",
+    "sans-serif": "Helvetica",
+    "Times New Roman": "Times-Roman",
+    "Times": "Times-Roman",
+    "Georgia": "Times-Roman",
+    "Palatino": "Times-Roman",
+    "serif": "Times-Roman",
+    "Courier New": "Courier",
+    "Courier": "Courier",
+    "monospace": "Courier",
+}
+
+
+def _map_font(family: str) -> str:
+    """Map a font family to the closest ReportLab built-in font."""
+    return _REPORTLAB_FONTS.get(family, "Helvetica")
+
+
 class PDFExporter:
     """Export document content to PDF."""
     
@@ -75,6 +99,7 @@ class PDFExporter:
         filename: str = "document.pdf",
         paper_size: str = "A4",
         margins: Dict[str, float] = None,
+        page_breaks: list[str] = None,
     ) -> bytes:
         """
         Export document content to PDF.
@@ -84,12 +109,15 @@ class PDFExporter:
             filename: Output filename
             paper_size: Paper size (A4, LETTER, LEGAL)
             margins: Margins in points {top, right, bottom, left}
+            page_breaks: Block IDs where explicit page breaks should occur
         
         Returns:
             PDF file as bytes
         """
         if margins is None:
             margins = {"top": 72, "right": 72, "bottom": 72, "left": 72}
+        if page_breaks is None:
+            page_breaks = []
         
         # Create PDF in memory
         buffer = io.BytesIO()
@@ -107,8 +135,8 @@ class PDFExporter:
             bottomMargin=margins.get("bottom", 72),
         )
         
-        # Build story (content)
-        story = self._build_story(content)
+        # Build story (content) with page breaks
+        story = self._build_story(content, page_breaks)
         
         # Generate PDF
         doc.build(story)
@@ -119,8 +147,12 @@ class PDFExporter:
         
         return pdf_bytes
     
-    def _build_story(self, content: Dict[str, Any]) -> List:
-        """Build PDF story from document content."""
+    def _build_story(self, content: Dict[str, Any], page_breaks: list[str] = None) -> List:
+        """Build PDF story from document content, inserting page breaks where specified."""
+        if page_breaks is None:
+            page_breaks = []
+        
+        break_set = set(page_breaks)
         story = []
         
         # Process document children
@@ -128,6 +160,7 @@ class PDFExporter:
         
         for child in children:
             block_type = child.get("type", "")
+            block_id = child.get("id", "")
             
             if block_type == "paragraph":
                 story.extend(self._process_paragraph(child))
@@ -145,27 +178,55 @@ class PDFExporter:
                 story.extend(self._process_image(child))
             elif block_type == "table":
                 story.extend(self._process_table(child))
+            
+            # Insert page break after this block if it's a break point
+            if block_id in break_set:
+                story.append(PageBreak())
         
         return story
     
+    def _alignment_from_block(self, block: Dict[str, Any]) -> int:
+        """Map block attrs.textAlign to ReportLab alignment constant."""
+        attrs = block.get("attrs", {}) or {}
+        align = attrs.get("textAlign", "left")
+        mapping = {
+            "left": TA_LEFT,
+            "center": TA_CENTER,
+            "right": TA_RIGHT,
+            "justify": TA_JUSTIFY,
+        }
+        return mapping.get(align, TA_LEFT)
+
     def _process_paragraph(self, block: Dict[str, Any]) -> List:
         """Process paragraph block."""
         text = self._extract_text(block)
         if text:
-            return [Paragraph(text, self.styles['BodyTextCustom'])]
+            align = self._alignment_from_block(block)
+            style = ParagraphStyle(
+                'BodyTextAligned',
+                parent=self.styles['BodyTextCustom'],
+                alignment=align,
+            )
+            return [Paragraph(text, style)]
         return []
     
     def _process_heading(self, block: Dict[str, Any]) -> List:
         """Process heading block."""
         level = block.get("level", 1)
         text = self._extract_text(block)
+        align = self._alignment_from_block(block)
         
         style_map = {
             1: self.styles['Heading1Custom'],
             2: self.styles['Heading2Custom'],
             3: self.styles['Heading3Custom'],
         }
-        style = style_map.get(level, self.styles['Heading1Custom'])
+        base = style_map.get(level, self.styles['Heading1Custom'])
+        style = ParagraphStyle(
+            'HeadingAligned',
+            parent=base,
+            alignment=align,
+        )
         
         if text:
             return [Paragraph(text, style)]
@@ -257,6 +318,7 @@ class PDFExporter:
             if child.get("type") == "text":
                 content = child.get("content", "")
                 marks = child.get("marks", [])
+                attrs = child.get("attrs", {}) or {}
                 
                 # Apply marks
                 if "bold" in marks:
@@ -267,6 +329,22 @@ class PDFExporter:
                     content = f"<u>{content}</u>"
                 if "strikethrough" in marks:
                     content = f"<strike>{content}</strike>"
+                
+                # Apply inline style tags from attrs (font size, family, color)
+                font_attrs = []
+                fs = attrs.get("fontSize")
+                if fs is not None:
+                    font_attrs.append(f'size="{fs}"')
+                ff = attrs.get("fontFamily")
+                if ff is not None and isinstance(ff, str):
+                    mapped = _map_font(ff)
+                    font_attrs.append(f'face="{mapped}"')
+                color = attrs.get("color")
+                if color and isinstance(color, str):
+                    font_attrs.append(f'color="{color}"')
+                
+                if font_attrs:
+                    content = f'<font {" ".join(font_attrs)}>{content}</font>'
                 
                 text_parts.append(content)
         

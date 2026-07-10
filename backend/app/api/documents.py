@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 import io
 
-from ..models.document import Document, DocumentCreate, DocumentUpdate, DocumentResponse
-from ..core.storage import storage
+from ..models.document import DocumentCreate, DocumentUpdate, DocumentResponse
+from ..core.database import get_db
+from ..core import storage as store
 from ..services.pdf_export import exporter
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -16,81 +18,54 @@ class ExportRequest(BaseModel):
     content: dict
     paper_size: str = "A4"
     margins: dict = {"top": 72, "right": 72, "bottom": 72, "left": 72}
+    page_breaks: list[str] = []  # block IDs where page breaks should occur
 
 
-# Document CRUD endpoints
+# ── Document CRUD ─────────────────────────────────────────────────
+
+
 @router.get("/documents/", response_model=List[DocumentResponse])
-def list_documents():
+def list_documents(db: Session = Depends(get_db)):
     """List all documents."""
-    documents = storage.list_documents()
-    return [
-        DocumentResponse(
-            id=doc.id,
-            title=doc.title,
-            content=doc.content,
-            created_at=doc.created_at.isoformat(),
-            updated_at=doc.updated_at.isoformat(),
-        )
-        for doc in documents
-    ]
+    return store.list_documents(db)
 
 
-@router.post("/documents/", response_model=DocumentResponse)
-def create_document(data: DocumentCreate):
+@router.post("/documents/", response_model=DocumentResponse, status_code=201)
+def create_document(data: DocumentCreate, db: Session = Depends(get_db)):
     """Create a new document."""
-    doc = storage.create_document(data)
-    return DocumentResponse(
-        id=doc.id,
-        title=doc.title,
-        content=doc.content,
-        created_at=doc.created_at.isoformat(),
-        updated_at=doc.updated_at.isoformat(),
-    )
+    return store.create_document(db, data)
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentResponse)
-def get_document(doc_id: str):
+def get_document(doc_id: str, db: Session = Depends(get_db)):
     """Get a document by ID."""
-    doc = storage.get_document(doc_id)
+    doc = store.get_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    return DocumentResponse(
-        id=doc.id,
-        title=doc.title,
-        content=doc.content,
-        created_at=doc.created_at.isoformat(),
-        updated_at=doc.updated_at.isoformat(),
-    )
+    return doc
 
 
 @router.put("/documents/{doc_id}", response_model=DocumentResponse)
-def update_document(doc_id: str, data: DocumentUpdate):
+def update_document(doc_id: str, data: DocumentUpdate, db: Session = Depends(get_db)):
     """Update a document."""
-    doc = storage.update_document(doc_id, data)
+    doc = store.update_document(db, doc_id, data)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    return DocumentResponse(
-        id=doc.id,
-        title=doc.title,
-        content=doc.content,
-        created_at=doc.created_at.isoformat(),
-        updated_at=doc.updated_at.isoformat(),
-    )
+    return doc
 
 
 @router.delete("/documents/{doc_id}")
-def delete_document(doc_id: str):
+def delete_document(doc_id: str, db: Session = Depends(get_db)):
     """Delete a document."""
-    success = storage.delete_document(doc_id)
+    success = store.delete_document(db, doc_id)
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
-    
     return {"message": "Document deleted"}
 
 
-# PDF Export endpoint
+# ── PDF Export ─────────────────────────────────────────────────────
+
+
 @router.post("/export/pdf")
 def export_pdf(request: ExportRequest):
     """Export document content to PDF."""
@@ -99,9 +74,9 @@ def export_pdf(request: ExportRequest):
             content=request.content,
             paper_size=request.paper_size,
             margins=request.margins,
+            page_breaks=request.page_breaks,
         )
-        
-        # Return as streaming response
+
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",

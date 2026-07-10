@@ -24,13 +24,13 @@ import { getBlockNodes } from '../document';
 
 /** Default layout constraints */
 export const DEFAULT_CONSTRAINTS: LayoutConstraints = {
-  width: 624, // 816 - 96*2 (A4 with 1 inch margins)
+  width: 602, // 794 - 96*2 (A4 with 1 inch margins at 96dpi)
   height: Infinity,
   fontFamily: 'Georgia',
   fontSize: 16,
   lineHeight: 1.5,
   marginTop: 0,
-  marginBottom: 12,
+  marginBottom: 8,
   marginLeft: 0,
   marginRight: 0,
   paddingTop: 0,

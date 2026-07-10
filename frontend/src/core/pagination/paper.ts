@@ -1,28 +1,33 @@
 // ============================================================
-// Paper Sizes (in points, 1/72 inch)
+// Paper Sizes (in CSS pixels at 96dpi)
 // ============================================================
+//
+// These match the CSS rendering: 1 inch = 96px
+// - A4: 210mm x 297mm → 794 x 1123px
+// - Letter: 8.5" x 11" → 816 x 1056px
+// - Legal: 8.5" x 14" → 816 x 1344px
 
 import type { PaperSize } from './types';
 
-/** A4 — 210mm x 297mm */
+/** A4 — 210mm x 297mm (794 x 1123px at 96dpi) */
 export const A4: PaperSize = {
   name: 'A4',
-  width: 595.28, // 210mm * 72/25.4
-  height: 841.89, // 297mm * 72/25.4
+  width: 794,
+  height: 1123,
 };
 
 /** Letter — 8.5" x 11" */
 export const LETTER: PaperSize = {
   name: 'Letter',
-  width: 612, // 8.5 * 72
-  height: 792, // 11 * 72
+  width: 816,
+  height: 1056,
 };
 
 /** Legal — 8.5" x 14" */
 export const LEGAL: PaperSize = {
   name: 'Legal',
-  width: 612, // 8.5 * 72
-  height: 1008, // 14 * 72
+  width: 816,
+  height: 1344,
 };
 
 /** All available paper sizes */

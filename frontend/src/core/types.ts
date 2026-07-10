@@ -8,12 +8,20 @@ export type NodeId = string;
 /** Mark types that can be applied to text runs (boolean toggles) */
 export type MarkType = 'bold' | 'italic' | 'underline' | 'strikethrough';
 
+/** Text alignment for blocks */
+export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+
 /** Style attributes for text runs (key-value pairs) */
 export interface StyleAttrs {
   fontFamily?: string;
   fontSize?: number;
   color?: string;
   backgroundColor?: string;
+}
+
+/** Block-level style attributes */
+export interface BlockAttrs {
+  textAlign?: TextAlign;
 }
 
 /** Block types */
@@ -50,6 +58,7 @@ export interface TextRun extends BaseNode {
 export interface Paragraph extends BaseNode {
   type: 'paragraph';
   children: TextRun[];
+  attrs?: BlockAttrs;
 }
 
 /** Heading — a paragraph with a level */
@@ -57,6 +66,7 @@ export interface Heading extends BaseNode {
   type: 'heading';
   level: 1 | 2 | 3 | 4 | 5 | 6;
   children: TextRun[];
+  attrs?: BlockAttrs;
 }
 
 /** List — ordered or unordered */
@@ -247,6 +257,14 @@ export interface SetStyleOp extends BaseOperation {
   endOffset: number;
 }
 
+/** Set block-level attributes (alignment, etc.) */
+export interface SetBlockAttrsOp extends BaseOperation {
+  type: 'setBlockAttrs';
+  blockId: NodeId;
+  attrs: BlockAttrs;
+  prevAttrs: BlockAttrs;
+}
+
 /** Insert block operation (after a given block) */
 export interface InsertBlockOp extends BaseOperation {
   type: 'insertBlock';
@@ -344,6 +362,7 @@ export type Operation =
   | MergeBlocksOp
   | ToggleMarkOp
   | SetStyleOp
+  | SetBlockAttrsOp
   | InsertBlockOp
   | ConvertBlockOp
   | DeleteBlockOp

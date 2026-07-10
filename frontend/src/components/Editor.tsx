@@ -18,7 +18,11 @@ import { CursorOverlay } from './Cursor';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
 
-export function Editor() {
+interface EditorProps {
+  onBack?: () => void;
+}
+
+export function Editor({ onBack }: EditorProps) {
   const doc = useDocumentStore((s) => s.document);
   const insertText = useDocumentStore((s) => s.insertText);
   const deleteText = useDocumentStore((s) => s.deleteText);
@@ -703,7 +707,7 @@ export function Editor() {
 
   return (
     <div className="editor" ref={containerRef}>
-      <Toolbar />
+      <Toolbar onBack={onBack} />
 
       {/* Hidden textarea for keyboard input */}
       <textarea

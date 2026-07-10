@@ -1,61 +1,69 @@
-"""Simple in-memory storage for documents."""
-from typing import Dict, Optional
-from datetime import datetime
+"""Document persistence layer backed by SQLAlchemy sessions."""
 import json
-import uuid
+from typing import Optional
 
-from ..models.document import Document, DocumentCreate, DocumentUpdate
+from sqlalchemy.orm import Session
+
+from ..models.document import DocumentModel, DocumentCreate, DocumentUpdate, DocumentResponse
 
 
-class DocumentStorage:
-    """Simple in-memory document storage."""
-    
-    def __init__(self):
-        self.documents: Dict[str, Document] = {}
-    
-    def list_documents(self):
-        """List all documents."""
-        return list(self.documents.values())
-    
-    def get_document(self, doc_id: str) -> Optional[Document]:
-        """Get a document by ID."""
-        return self.documents.get(doc_id)
-    
-    def create_document(self, data: DocumentCreate) -> Document:
-        """Create a new document."""
-        doc_id = str(uuid.uuid4())
-        now = datetime.utcnow()
-        doc = Document(
-            id=doc_id,
-            title=data.title,
-            content=data.content or {},
-            created_at=now,
-            updated_at=now,
-        )
-        self.documents[doc_id] = doc
-        return doc
-    
-    def update_document(self, doc_id: str, data: DocumentUpdate) -> Optional[Document]:
-        """Update a document."""
-        doc = self.documents.get(doc_id)
-        if not doc:
-            return None
-        
-        if data.title is not None:
-            doc.title = data.title
-        if data.content is not None:
-            doc.content = data.content
-        
-        doc.updated_at = datetime.utcnow()
-        return doc
-    
-    def delete_document(self, doc_id: str) -> bool:
-        """Delete a document."""
-        if doc_id in self.documents:
-            del self.documents[doc_id]
-            return True
+def _doc_to_response(doc: DocumentModel) -> DocumentResponse:
+    return DocumentResponse(
+        id=doc.id,
+        title=doc.title,
+        content=json.loads(doc.content) if isinstance(doc.content, str) else doc.content,
+        created_at=doc.created_at.isoformat(),
+        updated_at=doc.updated_at.isoformat(),
+    )
+
+
+def list_documents(db: Session) -> list[DocumentResponse]:
+    """Return all documents ordered by last updated."""
+    docs = db.query(DocumentModel).order_by(DocumentModel.updated_at.desc()).all()
+    return [_doc_to_response(d) for d in docs]
+
+
+def get_document(db: Session, doc_id: str) -> Optional[DocumentResponse]:
+    """Return a single document by id, or None."""
+    doc = db.query(DocumentModel).filter(DocumentModel.id == doc_id).first()
+    if not doc:
+        return None
+    return _doc_to_response(doc)
+
+
+def create_document(db: Session, data: DocumentCreate) -> DocumentResponse:
+    """Create and return a new document."""
+    doc = DocumentModel(
+        title=data.title,
+        content=json.dumps(data.content) if isinstance(data.content, dict) else data.content,
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return _doc_to_response(doc)
+
+
+def update_document(db: Session, doc_id: str, data: DocumentUpdate) -> Optional[DocumentResponse]:
+    """Update an existing document and return it, or None if not found."""
+    doc = db.query(DocumentModel).filter(DocumentModel.id == doc_id).first()
+    if not doc:
+        return None
+
+    if data.title is not None:
+        doc.title = data.title
+    if data.content is not None:
+        doc.content = json.dumps(data.content) if isinstance(data.content, dict) else data.content
+
+    db.commit()
+    db.refresh(doc)
+    return _doc_to_response(doc)
+
+
+def delete_document(db: Session, doc_id: str) -> bool:
+    """Delete a document by id. Returns True if deleted, False if not found."""
+    doc = db.query(DocumentModel).filter(DocumentModel.id == doc_id).first()
+    if not doc:
         return False
-
-
-# Global storage instance
-storage = DocumentStorage()
+    db.delete(doc)
+    db.commit()
+    return True

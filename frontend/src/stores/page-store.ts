@@ -9,6 +9,14 @@ import type {
   PageNumberPosition,
 } from '../core/pagination/types';
 import { PaginationEngine } from '../core/pagination/engine';
+import { useLayoutStore } from './layout-store';
+
+// ============================================================
+// A4 at 96dpi: 794 x 1123px, 1 inch margins = 96px
+// ============================================================
+
+const DEFAULT_PAPER: PaperSize = { name: 'A4', width: 794, height: 1123 };
+const DEFAULT_MARGINS: Margins = { top: 96, right: 96, bottom: 96, left: 96 };
 
 // ============================================================
 // Page Store
@@ -27,15 +35,20 @@ interface PageState {
   updateMargins: (margins: Partial<Margins>) => void;
   updateHeaderFooter: (config: Partial<HeaderFooterConfig>) => void;
   updatePageNumberPosition: (position: PageNumberPosition) => void;
+  /** Rounded paper sizes for the UI selector */
+  availablePaperSizes: PaperSize[];
 }
 
 export const usePageStore = create<PageState>((set, get) => ({
-  engine: new PaginationEngine(),
+  engine: new PaginationEngine({
+    paperSize: DEFAULT_PAPER,
+    margins: DEFAULT_MARGINS,
+  }),
   pages: [],
   totalPages: 0,
   config: {
-    paperSize: { name: 'A4', width: 595.28, height: 841.89 },
-    margins: { top: 72, right: 72, bottom: 72, left: 72 },
+    paperSize: { ...DEFAULT_PAPER },
+    margins: { ...DEFAULT_MARGINS },
     headerFooter: {
       enabled: false,
       firstPageDifferent: true,
@@ -44,6 +57,11 @@ export const usePageStore = create<PageState>((set, get) => ({
       pageNumberPosition: 'bottom-center',
     },
   },
+  availablePaperSizes: [
+    { name: 'A4', width: 794, height: 1123 },
+    { name: 'Letter', width: 816, height: 1056 },
+    { name: 'Legal', width: 816, height: 1344 },
+  ],
 
   paginate: (layout) => {
     const { engine } = get();
@@ -60,8 +78,13 @@ export const usePageStore = create<PageState>((set, get) => ({
   },
 
   updatePaperSize: (paperSize) => {
-    const { engine } = get();
+    const { engine, config } = get();
     engine.updateConfig({ paperSize });
+
+    // Sync layout constraints width to match new content width
+    const contentWidth = paperSize.width - config.margins.left - config.margins.right;
+    useLayoutStore.getState().updateConstraints({ width: contentWidth });
+
     set({ config: engine.getConfig() });
   },
 
@@ -70,7 +93,11 @@ export const usePageStore = create<PageState>((set, get) => ({
     engine.updateConfig({
       margins: { ...config.margins, ...margins },
     });
-    set({ config: engine.getConfig() });
+    // Re-sync width when margins change
+    const newConfig = engine.getConfig();
+    const contentWidth = newConfig.paperSize.width - newConfig.margins.left - newConfig.margins.right;
+    useLayoutStore.getState().updateConstraints({ width: contentWidth });
+    set({ config: newConfig });
   },
 
   updateHeaderFooter: (hfConfig) => {

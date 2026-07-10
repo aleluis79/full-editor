@@ -92,3 +92,40 @@ export async function deleteDocument(id: string): Promise<void> {
     throw new Error('Failed to delete document');
   }
 }
+
+// ── PDF Export ──────────────────────────────────────────────────
+
+export interface ExportPDFData {
+  content: Record<string, unknown>;
+  paper_size?: string;
+  margins?: { top: number; right: number; bottom: number; left: number };
+  page_breaks?: string[];
+}
+
+/**
+ * Export document content to PDF and download it.
+ */
+export async function exportPDF(
+  data: ExportPDFData,
+  filename: string = 'document.pdf'
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/export/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to export PDF');
+  }
+
+  // Trigger file download from the blob
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
