@@ -59,6 +59,7 @@ export function Editor({ onBack }: EditorProps) {
   const dragState = useRef<{
     anchor: { nodeId: string; offset: number };
   } | null>(null);
+  const justFinishedDrag = useRef(false);
 
   const handleBlockMouseDown = useCallback(
     (blockId: string, e: React.MouseEvent) => {
@@ -97,6 +98,13 @@ export function Editor({ onBack }: EditorProps) {
     const handleMouseUp = () => {
       if (!dragState.current) return;
       dragState.current = null;
+      // Block the selectionchange handler from clearing our JS selection
+      justFinishedDrag.current = true;
+      setTimeout(() => {
+        justFinishedDrag.current = false;
+        // Re-focus the textarea so keyboard input works after drag-select
+        textareaRef.current?.focus();
+      }, 50);
     };
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -553,8 +561,8 @@ export function Editor({ onBack }: EditorProps) {
         case 'b': {
           if ((e.ctrlKey || e.metaKey) && hasSelection) {
             e.preventDefault();
-            const { start, end } = getSelectionRange(selection!);
-            toggleMark(start.nodeId, start.offset, end.offset, 'bold');
+            const { start, end } = getSelectionRange(selection!, doc);
+            toggleMark(start.nodeId, start.offset, end.offset, 'bold', end.nodeId);
             clearSelection();
             setCursorPosition(end);
           } else {
@@ -574,8 +582,8 @@ export function Editor({ onBack }: EditorProps) {
         case 'i': {
           if ((e.ctrlKey || e.metaKey) && hasSelection) {
             e.preventDefault();
-            const { start, end } = getSelectionRange(selection!);
-            toggleMark(start.nodeId, start.offset, end.offset, 'italic');
+            const { start, end } = getSelectionRange(selection!, doc);
+            toggleMark(start.nodeId, start.offset, end.offset, 'italic', end.nodeId);
             clearSelection();
             setCursorPosition(end);
           } else {
@@ -595,8 +603,8 @@ export function Editor({ onBack }: EditorProps) {
         case 'u': {
           if ((e.ctrlKey || e.metaKey) && hasSelection) {
             e.preventDefault();
-            const { start, end } = getSelectionRange(selection!);
-            toggleMark(start.nodeId, start.offset, end.offset, 'underline');
+            const { start, end } = getSelectionRange(selection!, doc);
+            toggleMark(start.nodeId, start.offset, end.offset, 'underline', end.nodeId);
             clearSelection();
             setCursorPosition(end);
           } else {
@@ -671,7 +679,7 @@ export function Editor({ onBack }: EditorProps) {
   // to avoid interference between the two.
   useEffect(() => {
     const handler = () => {
-      if (dragState.current) return;
+      if (dragState.current || justFinishedDrag.current) return;
       const sel = window.getSelection();
       if (!sel) return;
 

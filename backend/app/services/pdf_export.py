@@ -198,7 +198,7 @@ class PDFExporter:
         return mapping.get(align, TA_LEFT)
 
     def _process_paragraph(self, block: Dict[str, Any]) -> List:
-        """Process paragraph block."""
+        """Process paragraph block. Empty paragraphs become blank lines."""
         text = self._extract_text(block)
         if text:
             align = self._alignment_from_block(block)
@@ -208,7 +208,8 @@ class PDFExporter:
                 alignment=align,
             )
             return [Paragraph(text, style)]
-        return []
+        # Empty paragraph → blank line using a spacer the height of one text line
+        return [Spacer(1, self.styles['BodyTextCustom'].leading or 16)]
     
     def _process_heading(self, block: Dict[str, Any]) -> List:
         """Process heading block."""

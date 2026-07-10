@@ -32,6 +32,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const insertBlock = useDocumentStore((s) => s.insertBlock);
   const convertBlock = useDocumentStore((s) => s.convertBlock);
   const setBlockAttrs = useDocumentStore((s) => s.setBlockAttrs);
+  const setBlockAttrsRange = useDocumentStore((s) => s.setBlockAttrsRange);
 
   const currentDocId = useDocumentStore((s) => s.currentDocId);
   const documentTitle = useDocumentStore((s) => s.documentTitle);
@@ -52,17 +53,19 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   const hasSelection = selection && !isSelectionEmpty(selection);
   const hasCursor = cursor.position.nodeId !== '';
+  const startBlock = selection?.anchor.nodeId ?? '';
+  const endBlock = selection?.focus.nodeId ?? '';
 
   const handleToggleMark = (mark: MarkType) => {
     if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!);
-    toggleMark(start.nodeId, start.offset, end.offset, mark);
+    const { start, end } = getSelectionRange(selection!, doc);
+    toggleMark(start.nodeId, start.offset, end.offset, mark, end.nodeId);
   };
 
   const handleSetStyle = (key: keyof StyleAttrs, value: string | number | undefined) => {
     if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!);
-    setStyle(start.nodeId, start.offset, end.offset, key, value);
+    const { start, end } = getSelectionRange(selection!, doc);
+    setStyle(start.nodeId, start.offset, end.offset, key, value, end.nodeId);
   };
 
   const handleInsertBlock = (blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => {
@@ -72,8 +75,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   const handleClearFormatting = () => {
     if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!);
-    clearFormattingAction(start.nodeId, start.offset, end.offset);
+    const { start, end } = getSelectionRange(selection!, doc);
+    clearFormattingAction(start.nodeId, start.offset, end.offset, end.nodeId);
   };
 
   const handleConvertBlock = (toType: BlockType, attrs?: Record<string, unknown>) => {
@@ -257,24 +260,42 @@ export function Toolbar({ onBack }: ToolbarProps) {
       <div className="toolbar-group">
         <button
           className="toolbar-btn"
-          onClick={() => hasCursor && setBlockAttrs(cursor.position.nodeId, { textAlign: 'left' })}
-          disabled={!hasCursor}
+          onClick={() => {
+            if (hasSelection && startBlock !== endBlock) {
+              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'left' });
+            } else if (hasCursor) {
+              setBlockAttrs(cursor.position.nodeId, { textAlign: 'left' });
+            }
+          }}
+          disabled={!hasCursor && !hasSelection}
           title="Alinear a la izquierda"
         >
           <span className="align-icon"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
         </button>
         <button
           className="toolbar-btn"
-          onClick={() => hasCursor && setBlockAttrs(cursor.position.nodeId, { textAlign: 'center' })}
-          disabled={!hasCursor}
+          onClick={() => {
+            if (hasSelection && startBlock !== endBlock) {
+              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'center' });
+            } else if (hasCursor) {
+              setBlockAttrs(cursor.position.nodeId, { textAlign: 'center' });
+            }
+          }}
+          disabled={!hasCursor && !hasSelection}
           title="Centrar"
         >
           <span className="align-icon align-icon-center"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
         </button>
         <button
           className="toolbar-btn"
-          onClick={() => hasCursor && setBlockAttrs(cursor.position.nodeId, { textAlign: 'right' })}
-          disabled={!hasCursor}
+          onClick={() => {
+            if (hasSelection && startBlock !== endBlock) {
+              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'right' });
+            } else if (hasCursor) {
+              setBlockAttrs(cursor.position.nodeId, { textAlign: 'right' });
+            }
+          }}
+          disabled={!hasCursor && !hasSelection}
           title="Alinear a la derecha"
         >
           <span className="align-icon align-icon-right"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>

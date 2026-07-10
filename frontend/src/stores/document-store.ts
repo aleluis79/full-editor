@@ -86,10 +86,11 @@ interface DocumentState {
   mergeBlocks: (blockId: NodeId) => { newCursorPosition: { nodeId: string; offset: number } } | null;
   deleteSelection: (selection: Selection) => { newCursorPosition: { nodeId: string; offset: number } };
   replaceSelection: (selection: Selection, text: string) => { newCursorPosition: { nodeId: string; offset: number } };
-  toggleMark: (blockId: NodeId, startOffset: number, endOffset: number, mark: MarkType) => void;
-  setStyle: (blockId: NodeId, startOffset: number, endOffset: number, key: keyof StyleAttrs, value: string | number | undefined) => void;
-  clearFormatting: (blockId: NodeId, startOffset: number, endOffset: number) => void;
+  toggleMark: (blockId: NodeId, startOffset: number, endOffset: number, mark: MarkType, endBlockId?: NodeId) => void;
+  setStyle: (blockId: NodeId, startOffset: number, endOffset: number, key: keyof StyleAttrs, value: string | number | undefined, endBlockId?: NodeId) => void;
+  clearFormatting: (blockId: NodeId, startOffset: number, endOffset: number, endBlockId?: NodeId) => void;
   setBlockAttrs: (blockId: NodeId, attrs: BlockAttrs) => void;
+  setBlockAttrsRange: (startBlockId: NodeId, endBlockId: NodeId, attrs: BlockAttrs) => void;
   insertBlock: (afterBlockId: NodeId, blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => NodeId;
   convertBlock: (blockId: NodeId, toType: BlockType, attrs?: Record<string, unknown>) => void;
   insertImage: (afterBlockId: NodeId, src: string, alt?: string, width?: number, height?: number, inline?: boolean) => NodeId;
@@ -631,26 +632,56 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     };
   },
 
-  toggleMark: (blockId, startOffset, endOffset, mark) => {
+  toggleMark: (blockId, startOffset, endOffset, mark, endBlockId?) => {
     const { document, history, historyIndex } = get();
     const docClone = cloneDocument(document);
     const now = Date.now();
 
-    const op: ToggleMarkOp = {
-      type: 'toggleMark',
-      blockId,
-      mark,
-      startOffset,
-      endOffset,
-    };
+    const blocks = getBlockNodes(docClone);
+    const actualStart = Math.min(startOffset, endOffset);
+    const actualEnd = Math.max(startOffset, endOffset);
+    const targetEndId = endBlockId || blockId;
 
-    applyToggleMark(docClone, op);
+    const ops: Operation[] = [];
+    let started = false;
+
+    for (const b of blocks) {
+      if (b.type !== 'paragraph' && b.type !== 'heading') continue;
+
+      if (b.id === blockId && !started) {
+        started = true;
+        if (b.id === targetEndId) {
+          ops.push({ type: 'toggleMark', blockId: b.id, mark, startOffset: actualStart, endOffset: actualEnd } as ToggleMarkOp);
+          break;
+        }
+        const textLen = getBlockText(b as Paragraph | Heading);
+        ops.push({ type: 'toggleMark', blockId: b.id, mark, startOffset: actualStart, endOffset: textLen } as ToggleMarkOp);
+        continue;
+      }
+
+      if (started) {
+        const textLen = getBlockText(b as Paragraph | Heading);
+        if (b.id === targetEndId) {
+          ops.push({ type: 'toggleMark', blockId: b.id, mark, startOffset: 0, endOffset: actualEnd } as ToggleMarkOp);
+          break;
+        }
+        ops.push({ type: 'toggleMark', blockId: b.id, mark, startOffset: 0, endOffset: textLen } as ToggleMarkOp);
+      }
+    }
+
+    if (ops.length === 0) {
+      ops.push({ type: 'toggleMark', blockId, mark, startOffset: actualStart, endOffset: actualEnd } as ToggleMarkOp);
+    }
+
+    for (const op of ops) {
+      applyToggleMark(docClone, op as ToggleMarkOp);
+    }
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
       timestamp: now,
-      forward: [op],
-      inverse: [invertOperation(op)],
+      forward: ops,
+      inverse: ops.map((op) => invertOperation(op)),
       description: `Toggle ${mark}`,
     };
 
@@ -665,27 +696,56 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     });
   },
 
-  setStyle: (blockId, startOffset, endOffset, key, value) => {
+  setStyle: (blockId, startOffset, endOffset, key, value, endBlockId?) => {
     const { document, history, historyIndex } = get();
     const docClone = cloneDocument(document);
     const now = Date.now();
 
-    const op: SetStyleOp = {
-      type: 'setStyle',
-      blockId,
-      key,
-      value,
-      startOffset,
-      endOffset,
-    };
+    const blocks = getBlockNodes(docClone);
+    const actualStart = Math.min(startOffset, endOffset);
+    const actualEnd = Math.max(startOffset, endOffset);
+    const targetEndId = endBlockId || blockId;
 
-    applySetStyle(docClone, op);
+    const ops: Operation[] = [];
+    let started = false;
+
+    for (const b of blocks) {
+      if (b.type !== 'paragraph' && b.type !== 'heading') continue;
+
+      if (b.id === blockId && !started) {
+        started = true;
+        if (b.id === targetEndId) {
+          ops.push({ type: 'setStyle', blockId: b.id, key, value, startOffset: actualStart, endOffset: actualEnd } as SetStyleOp);
+          break;
+        }
+        const textLen = getBlockText(b as Paragraph | Heading);
+        ops.push({ type: 'setStyle', blockId: b.id, key, value, startOffset: actualStart, endOffset: textLen } as SetStyleOp);
+        continue;
+      }
+
+      if (started) {
+        const textLen = getBlockText(b as Paragraph | Heading);
+        if (b.id === targetEndId) {
+          ops.push({ type: 'setStyle', blockId: b.id, key, value, startOffset: 0, endOffset: actualEnd } as SetStyleOp);
+          break;
+        }
+        ops.push({ type: 'setStyle', blockId: b.id, key, value, startOffset: 0, endOffset: textLen } as SetStyleOp);
+      }
+    }
+
+    if (ops.length === 0) {
+      ops.push({ type: 'setStyle', blockId, key, value, startOffset: actualStart, endOffset: actualEnd } as SetStyleOp);
+    }
+
+    for (const op of ops) {
+      applySetStyle(docClone, op as SetStyleOp);
+    }
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
       timestamp: now,
-      forward: [op],
-      inverse: [invertOperation(op)],
+      forward: ops,
+      inverse: ops.map((op) => invertOperation(op)),
       description: `Set ${key}`,
     };
 
@@ -700,12 +760,38 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     });
   },
 
-  clearFormatting: (blockId, startOffset, endOffset) => {
+  clearFormatting: (blockId, startOffset, endOffset, endBlockId?) => {
     const { document, history, historyIndex } = get();
     const docClone = cloneDocument(document);
     const now = Date.now();
+    const actualStart = Math.min(startOffset, endOffset);
+    const actualEnd = Math.max(startOffset, endOffset);
+    const targetEndId = endBlockId || blockId;
 
-    applyClearFormatting(docClone, blockId, startOffset, endOffset);
+    const blocks = getBlockNodes(docClone);
+    let started = false;
+
+    for (const b of blocks) {
+      if (b.type !== 'paragraph' && b.type !== 'heading') continue;
+      if (b.id === blockId && !started) {
+        started = true;
+        if (b.id === targetEndId) {
+          applyClearFormatting(docClone, b.id, actualStart, actualEnd);
+          break;
+        }
+        const textLen = getBlockText(b as Paragraph | Heading);
+        applyClearFormatting(docClone, b.id, actualStart, textLen);
+        continue;
+      }
+      if (started) {
+        const textLen = getBlockText(b as Paragraph | Heading);
+        if (b.id === targetEndId) {
+          applyClearFormatting(docClone, b.id, 0, actualEnd);
+          break;
+        }
+        applyClearFormatting(docClone, b.id, 0, textLen);
+      }
+    }
 
     const entry: HistoryEntry = {
       id: `h-${now}`,
@@ -735,7 +821,6 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     const docClone = cloneDocument(document);
     const now = Date.now();
 
-    // Capture previous attrs for undo
     const block = findNode(docClone, blockId) as Paragraph | Heading | null;
     const prevAttrs = block?.attrs ?? {};
 
@@ -754,6 +839,60 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       forward: [op],
       inverse: [invertOperation(op)],
       description: attrs.textAlign ? `Align ${attrs.textAlign}` : 'Set block attrs',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    if (newHistory.length > MAX_HISTORY_ENTRIES) {
+      newHistory.splice(0, newHistory.length - MAX_HISTORY_ENTRIES);
+    }
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  setBlockAttrsRange: (startBlockId, endBlockId, attrs) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const blocks = getBlockNodes(docClone);
+    const startIdx = blocks.findIndex((b) => b.id === startBlockId);
+    const endIdx = blocks.findIndex((b) => b.id === endBlockId);
+    if (startIdx < 0 || endIdx < 0) return;
+
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+    const ops: Operation[] = [];
+
+    for (let i = minIdx; i <= maxIdx; i++) {
+      const b = blocks[i];
+      if (b.type !== 'paragraph' && b.type !== 'heading') continue;
+      const textBlock = b as Paragraph | Heading;
+      const prevAttrs = textBlock.attrs ?? {};
+      ops.push({
+        type: 'setBlockAttrs',
+        blockId: b.id,
+        attrs,
+        prevAttrs,
+      } as SetBlockAttrsOp);
+    }
+
+    for (const op of ops) {
+      applySetBlockAttrs(docClone, op as SetBlockAttrsOp);
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: ops,
+      inverse: ops.map((op) => invertOperation(op)),
+      description: ops.length > 1 ? `Align ${attrs.textAlign} (${ops.length} blocks)` : `Align ${attrs.textAlign}`,
     };
 
     const newHistory = history.slice(0, historyIndex + 1);

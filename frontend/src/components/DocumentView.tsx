@@ -434,16 +434,31 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
     const inBlock = (id: string) => id === block.id;
     const aIn = inBlock(selection.anchor.nodeId);
     const fIn = inBlock(selection.focus.nodeId);
-    if (!aIn && !fIn) return null;
-
     const blockLen = block.children.reduce((s, r) => s + r.content.length, 0);
+
     if (aIn && fIn) {
       const s = Math.min(selection.anchor.offset, selection.focus.offset);
       const e = Math.max(selection.anchor.offset, selection.focus.offset);
       return [s, e];
     }
     if (aIn) return [selection.anchor.offset, blockLen];
-    return [0, selection.focus.offset];
+    if (fIn) return [0, selection.focus.offset];
+
+    // Middle block in multi-block selection — entire block is selected
+    // Verify this block is actually between anchor and focus blocks
+    const doc = useDocumentStore.getState().document;
+    const allBlocks = getBlockNodes(doc);
+    const anchorIdx = allBlocks.findIndex((b) => b.id === selection.anchor.nodeId);
+    const focusIdx = allBlocks.findIndex((b) => b.id === selection.focus.nodeId);
+    const thisIdx = allBlocks.findIndex((b) => b.id === block.id);
+    if (
+      anchorIdx >= 0 && focusIdx >= 0 && thisIdx >= 0 &&
+      thisIdx > Math.min(anchorIdx, focusIdx) &&
+      thisIdx < Math.max(anchorIdx, focusIdx)
+    ) {
+      return [0, blockLen];
+    }
+    return null;
   };
 
   // Render text directly from block children (always works, no layout dependency)

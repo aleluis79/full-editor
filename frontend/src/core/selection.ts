@@ -23,28 +23,31 @@ export function isSelectionEmpty(selection: Selection | null): boolean {
 }
 
 /** Get the start and end positions of a selection (ordered) */
-export function getSelectionRange(selection: Selection): {
+export function getSelectionRange(
+  selection: Selection,
+  doc?: DocumentRoot
+): {
   start: LogicalPosition;
   end: LogicalPosition;
 } {
   const { anchor, focus } = selection;
 
-  // Compare positions: first by nodeId (document order), then by offset
+  // Same block: compare by offset
   if (anchor.nodeId === focus.nodeId) {
     return anchor.offset <= focus.offset
       ? { start: anchor, end: focus }
       : { start: focus, end: anchor };
   }
 
-  // Different nodes: find which comes first in document order
-  const blocks = getBlockNodes({ id: '', type: 'document', children: [] } as DocumentRoot);
-  // We need the actual document for this, so we'll use a simpler approach:
-  // Compare by node ID presence in the blocks array
+  // Different nodes: determine document order from actual blocks
+  const blocks = doc
+    ? getBlockNodes(doc)
+    : getBlockNodes({ id: '', type: 'document', children: [] } as DocumentRoot);
+
   const anchorIdx = blocks.findIndex((b) => b.id === anchor.nodeId);
   const focusIdx = blocks.findIndex((b) => b.id === focus.nodeId);
 
   if (anchorIdx === -1 || focusIdx === -1) {
-    // Fallback: use string comparison (not ideal but works for simple cases)
     return anchor.nodeId <= focus.nodeId
       ? { start: anchor, end: focus }
       : { start: focus, end: anchor };
@@ -62,7 +65,7 @@ export function getSelectedText(
 ): string {
   if (isSelectionEmpty(selection)) return '';
 
-  const { start, end } = getSelectionRange(selection);
+  const { start, end } = getSelectionRange(selection, doc);
   const blocks = getBlockNodes(doc);
   let text = '';
 
@@ -147,7 +150,7 @@ export function selectParagraph(
   };
 }
 
-/** Delete selected text from document */
+/** Delete selected text from document, removing empty blocks */
 export function deleteSelection(
   doc: DocumentRoot,
   selection: Selection
@@ -156,31 +159,96 @@ export function deleteSelection(
     return { newCursorPosition: selection.anchor };
   }
 
-  const { start, end } = getSelectionRange(selection);
+  const { start, end } = getSelectionRange(selection, doc);
   const blocks = getBlockNodes(doc);
 
-  // For now, handle single-block selection only
-  if (start.nodeId === end.nodeId) {
-    const block = blocks.find((b) => b.id === start.nodeId);
-    if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
-      return { newCursorPosition: start };
-    }
+  const startBlock = blocks.find((b) => b.id === start.nodeId);
+  const endBlock = blocks.find((b) => b.id === end.nodeId);
 
-    const textBlock = block as Paragraph | Heading;
-    const text = getBlockText(textBlock);
-
-    // Rebuild the text runs with the selection removed
-    const newText = text.slice(0, start.offset) + text.slice(end.offset);
-
-    // Simple approach: replace all children with a single run
-    if (textBlock.children.length > 0) {
-      textBlock.children[0].content = newText;
-      textBlock.children.splice(1);
-    }
-
+  if (!startBlock || (startBlock.type !== 'paragraph' && startBlock.type !== 'heading')) {
     return { newCursorPosition: start };
   }
 
-  // Multi-block selection: more complex, handle in future
+  // ---- Multi-block: delete across blocks ----
+  const isMultiBlock = start.nodeId !== end.nodeId;
+
+  if (isMultiBlock) {
+    // Find indices to delete from doc.children
+    const children = doc.children;
+    const childStartIdx = children.findIndex((c) => c.id === start.nodeId);
+    const childEndIdx = children.findIndex((c) => c.id === end.nodeId);
+    if (childStartIdx < 0 || childEndIdx < 0) return { newCursorPosition: start };
+
+    const minIdx = Math.min(childStartIdx, childEndIdx);
+    const maxIdx = Math.max(childStartIdx, childEndIdx);
+
+    // Truncate text in the first block from start.offset onward
+    const firstBlock = children[minIdx] as Paragraph | Heading;
+    const firstText = getBlockText(firstBlock);
+    const newFirstText = firstText.slice(0, start.offset);
+
+    if (newFirstText.length > 0) {
+      firstBlock.children[0].content = newFirstText;
+      firstBlock.children.splice(1);
+    }
+
+    // Remove middle blocks and the last block entirely
+    const removeStart = newFirstText.length === 0 ? minIdx : minIdx + 1;
+    const removeEnd = maxIdx;
+    const removed = children.splice(removeStart, removeEnd - removeStart + 1);
+
+    // Determine cursor position
+    if (newFirstText.length > 0) {
+      // First block still has text — cursor goes there
+      return { newCursorPosition: { nodeId: firstBlock.id, offset: start.offset } };
+    }
+    // First block is now empty and was removed — cursor at previous block end or document start
+    if (children.length > 0 && removeStart > 0) {
+      const prevBlock = children[removeStart - 1];
+      const prevText = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+        ? getBlockText(prevBlock as Paragraph | Heading)
+        : 0;
+      return { newCursorPosition: { nodeId: prevBlock.id, offset: prevText } };
+    }
+    if (children.length > 0) {
+      return { newCursorPosition: { nodeId: children[0].id, offset: 0 } };
+    }
+    return { newCursorPosition: { nodeId: '', offset: 0 } };
+  }
+
+  // ---- Single-block: delete within same block ----
+  const block = startBlock as Paragraph | Heading;
+  const text = getBlockText(block);
+
+  // Rebuild the text runs with the selection removed
+  const newText = text.slice(0, start.offset) + text.slice(end.offset);
+
+  if (newText.length === 0) {
+    // Block is now empty — remove it
+    const children = doc.children;
+    const idx = children.findIndex((c) => c.id === block.id);
+    if (idx >= 0) {
+      children.splice(idx, 1);
+    }
+    // Cursor at previous block end, or first block, or nowhere
+    if (children.length > 0 && idx > 0) {
+      const prevBlock = children[idx - 1];
+      const prevText = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+        ? getBlockText(prevBlock as Paragraph | Heading)
+        : 0;
+      return { newCursorPosition: { nodeId: prevBlock.id, offset: prevText } };
+    }
+    if (children.length > 0) {
+      return { newCursorPosition: { nodeId: children[0].id, offset: 0 } };
+    }
+    return { newCursorPosition: { nodeId: '', offset: 0 } };
+  }
+
+  // Simple approach: replace all children with a single run
+  if (block.children.length > 0) {
+    block.children[0].content = newText;
+    block.children.splice(1);
+  }
+
   return { newCursorPosition: start };
 }
