@@ -420,7 +420,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockCli
   // Render text directly from block children (always works, no layout dependency)
   const renderTextContent = () => {
     if (!block.children || block.children.length === 0) {
-      return <br />;
+      return <span className="text-run" data-empty="true">{'\u200B'}</span>;
     }
 
     return block.children.map((run, index) => {
@@ -435,7 +435,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockCli
 
       return (
         <span key={run.id || index} className="text-run" style={style}>
-          {run.content}
+          {run.content || '\u200B'}
         </span>
       );
     });
