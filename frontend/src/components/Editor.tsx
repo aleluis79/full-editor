@@ -11,7 +11,7 @@ import {
   moveCursorToLineEnd,
   clampCursor,
 } from '../core/cursor';
-import { selectWord, selectParagraph, getSelectedText, getSelectionRange } from '../core/selection';
+import { selectWord, selectParagraph, getSelectedText, getSelectionRange, isSelectionEmpty } from '../core/selection';
 import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition } from '../core/interaction';
 import { DocumentView } from './DocumentView';
 import { CursorOverlay } from './Cursor';
@@ -48,15 +48,75 @@ export function Editor() {
   const blocks = getBlockNodes(doc);
   const activeBlockId = cursor.position.nodeId || blocks[0]?.id || null;
 
+  // Track drag state for JS-based mouse selection. The browser's DOM
+  // Selection API cannot select text in non-contentEditable elements
+  // when a textarea has focus, so we implement selection entirely in
+  // JavaScript using mousedown/mousemove/mouseup events.
+  const dragState = useRef<{
+    anchor: { nodeId: string; offset: number };
+  } | null>(null);
+
+  const handleBlockMouseDown = useCallback(
+    (blockId: string, e: React.MouseEvent) => {
+      const blockEl = document.querySelector(
+        `[data-block-id="${blockId}"]`
+      ) as HTMLElement | null;
+      if (!blockEl) return;
+
+      const offset = getOffsetFromPoint(blockEl, e.clientX, e.clientY);
+      dragState.current = { anchor: { nodeId: blockId, offset } };
+      setCursorPosition({ nodeId: blockId, offset });
+      clearSelection();
+    },
+    [setCursorPosition, clearSelection]
+  );
+
+  // Track mousemove for drag selection — this runs on the document
+  // level so it works even when the user drags across blocks.
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState.current) return;
+
+      // Clear any browser-initiated DOM selection that might interfere
+      // with our JS-based selection rendering.
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) sel.removeAllRanges();
+
+      const hit = hitTest(e.clientX, e.clientY);
+      if (!hit) return;
+      setSelection({
+        anchor: dragState.current.anchor,
+        focus: { nodeId: hit.blockId, offset: hit.offset },
+      });
+      setCursorPosition({ nodeId: hit.blockId, offset: hit.offset });
+    };
+    const handleMouseUp = () => {
+      if (!dragState.current) return;
+      dragState.current = null;
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [setSelection, setCursorPosition]);
+
   // Focus the hidden textarea when clicking on the editor, and position
   // the cursor at the exact clicked character.
   const handleBlockClick = useCallback(
     (blockId: string, clientX: number, clientY: number) => {
       // If the browser has a non-collapsed native selection, the user
       // just finished a drag-select. Don't steal the selection by
-      // focusing the textarea — the blue highlight would disappear.
+      // focusing the textarea.
       const nativeSel = window.getSelection();
       if (nativeSel && !nativeSel.isCollapsed) return;
+
+      // If we have an active Zustand selection from our JS-based drag
+      // handler, preserve it too (the browser's native selection might
+      // already be collapsed by our mousemove cleanup).
+      const currentSel = useEditorStore.getState().selection;
+      if (currentSel && !isSelectionEmpty(currentSel)) return;
 
       const blockEl = document.querySelector(
         `[data-block-id="${blockId}"]`
@@ -602,8 +662,12 @@ export function Editor() {
   // selected by mouse drag is invisible to the toolbar and keyboard
   // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
   // Zustand never gets updated for mouse interactions.
+  // NOTE: When dragState.current is set, we're handling selection via
+  // our own mousemove handler — ignore browser selectionchange events
+  // to avoid interference between the two.
   useEffect(() => {
     const handler = () => {
+      if (dragState.current) return;
       const sel = window.getSelection();
       if (!sel) return;
 
@@ -654,6 +718,7 @@ export function Editor() {
       <DocumentView
         blocks={blocks}
         activeBlockId={activeBlockId}
+        onBlockMouseDown={handleBlockMouseDown}
         onBlockClick={handleBlockClick}
         onDoubleClick={handleDoubleClick}
         onTripleClick={handleTripleClick}

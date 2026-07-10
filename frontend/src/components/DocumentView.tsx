@@ -17,12 +17,13 @@ import { TableBlock } from './TableBlock';
 interface DocumentViewProps {
   blocks: BlockNode[];
   activeBlockId: string | null;
+  onBlockMouseDown: (blockId: string, e: React.MouseEvent) => void;
   onBlockClick: (blockId: string, clientX: number, clientY: number) => void;
   onDoubleClick: (blockId: string, clientX: number, clientY: number) => void;
   onTripleClick: (blockId: string, clientX: number, clientY: number) => void;
 }
 
-export function DocumentView({ blocks: _blocks, activeBlockId, onBlockClick, onDoubleClick, onTripleClick }: DocumentViewProps) {
+export function DocumentView({ blocks: _blocks, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick }: DocumentViewProps) {
   // Subscribe directly to document store for reactivity
   const doc = useDocumentStore((s) => s.document);
   const blocks = getBlockNodes(doc);
@@ -59,7 +60,7 @@ export function DocumentView({ blocks: _blocks, activeBlockId, onBlockClick, onD
       <div className="document-view" ref={containerRef}>
         <div className="page" style={{ position: 'relative' }}>
           <div className="page-content" style={{ position: 'relative' }}>
-            {blocks.map((block) => renderBlock(block, activeBlockId, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout))}
+            {blocks.map((block) => renderBlock(block, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout))}
           </div>
         </div>
       </div>
@@ -74,6 +75,7 @@ export function DocumentView({ blocks: _blocks, activeBlockId, onBlockClick, onD
           page={page}
           blocks={blocks}
           activeBlockId={activeBlockId}
+          onBlockMouseDown={onBlockMouseDown}
           onBlockClick={onBlockClick}
           onDoubleClick={onDoubleClick}
           onTripleClick={onTripleClick}
@@ -90,6 +92,7 @@ interface PageRendererProps {
   page: PageType;
   blocks: BlockNode[];
   activeBlockId: string | null;
+  onBlockMouseDown: (blockId: string, e: React.MouseEvent) => void;
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
@@ -98,7 +101,7 @@ interface PageRendererProps {
   isVirtualized: boolean;
 }
 
-function PageRenderer({ page, blocks, activeBlockId, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout: _getBlockLayout, headerFooter, isVirtualized }: PageRendererProps) {
+function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout: _getBlockLayout, headerFooter, isVirtualized }: PageRendererProps) {
   if (isVirtualized) {
     // Render placeholder with correct height
     return (
@@ -170,7 +173,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockClick, onDoubleClick
                 height: blockLayout.height,
               }}
             >
-              {renderBlockContent(block, blockLayout, activeBlockId, onBlockClick, onDoubleClick, onTripleClick)}
+              {renderBlockContent(block, blockLayout, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick)}
             </div>
           );
         })}
@@ -221,6 +224,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockClick, onDoubleClick
 function renderBlock(
   block: BlockNode,
   activeBlockId: string | null,
+  onBlockMouseDown: (blockId: string, e: React.MouseEvent) => void,
   onBlockClick: BlockClickHandler,
   onDoubleClick: BlockClickHandler,
   onTripleClick: BlockClickHandler,
@@ -235,6 +239,7 @@ function renderBlock(
         block={block as Paragraph | Heading}
         layout={blockLayout}
         isActive={block.id === activeBlockId}
+        onMouseDown={onBlockMouseDown}
         onClick={onBlockClick}
         onDoubleClick={onDoubleClick}
         onTripleClick={onTripleClick}
@@ -308,6 +313,7 @@ function renderBlockContent(
   block: BlockNode,
   blockLayout: BlockLayout,
   activeBlockId: string | null,
+  onBlockMouseDown: (blockId: string, e: React.MouseEvent) => void,
   onBlockClick: BlockClickHandler,
   onDoubleClick: BlockClickHandler,
   onTripleClick: BlockClickHandler
@@ -318,6 +324,7 @@ function renderBlockContent(
         block={block as Paragraph | Heading}
         layout={blockLayout}
         isActive={block.id === activeBlockId}
+        onMouseDown={onBlockMouseDown}
         onClick={onBlockClick}
         onDoubleClick={onDoubleClick}
         onTripleClick={onTripleClick}
@@ -328,7 +335,7 @@ function renderBlockContent(
   // For other block types, render with layout positions
   return (
     <div style={{ width: blockLayout.width, height: blockLayout.height }}>
-      {renderBlock(block, activeBlockId, onBlockClick, onDoubleClick, onTripleClick, () => blockLayout)}
+      {renderBlock(block, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick, () => blockLayout)}
     </div>
   );
 }
@@ -339,12 +346,13 @@ interface LayoutParagraphProps {
   block: Paragraph | Heading;
   layout: BlockLayout | undefined;
   isActive: boolean;
+  onMouseDown: (blockId: string, e: React.MouseEvent) => void;
   onClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
 }
 
-function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockClick, onDoubleClick, onTripleClick }: LayoutParagraphProps) {
+function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClick: onBlockClick, onDoubleClick, onTripleClick }: LayoutParagraphProps) {
   const className = `paragraph ${isActive ? 'active' : ''} ${block.type === 'heading' ? `heading-${(block as Heading).level}` : ''}`;
   const cursor = useEditorStore((s) => s.cursor);
   const selection = useEditorStore((s) => s.selection);
@@ -513,6 +521,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockCli
       ref={paraRef}
       className={className}
       data-block-id={block.id}
+      onMouseDown={(e) => onMouseDown(block.id, e)}
       onClick={(e) => onBlockClick(block.id, e.clientX, e.clientY)}
       onDoubleClick={(e) => onDoubleClick(block.id, e.clientX, e.clientY)}
       onMouseUp={(e) => {
