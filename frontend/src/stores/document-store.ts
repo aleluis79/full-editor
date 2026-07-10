@@ -16,6 +16,7 @@ import {
   applyMergeBlocks,
   applyToggleMark,
   applySetStyle,
+  applyClearFormatting,
   applyInsertBlock,
   applyConvertBlock,
   applyInsertImage,
@@ -58,6 +59,7 @@ interface DocumentState {
   replaceSelection: (selection: Selection, text: string) => { newCursorPosition: { nodeId: string; offset: number } };
   toggleMark: (blockId: NodeId, startOffset: number, endOffset: number, mark: MarkType) => void;
   setStyle: (blockId: NodeId, startOffset: number, endOffset: number, key: keyof StyleAttrs, value: string | number | undefined) => void;
+  clearFormatting: (blockId: NodeId, startOffset: number, endOffset: number) => void;
   insertBlock: (afterBlockId: NodeId, blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => NodeId;
   convertBlock: (blockId: NodeId, toType: BlockType, attrs?: Record<string, unknown>) => void;
   insertImage: (afterBlockId: NodeId, src: string, alt?: string, width?: number, height?: number, inline?: boolean) => NodeId;
@@ -541,6 +543,36 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  clearFormatting: (blockId, startOffset, endOffset) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    applyClearFormatting(docClone, blockId, startOffset, endOffset);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [{ type: 'setStyle', blockId }] as any,
+      inverse: [{ type: 'setStyle', blockId }] as any,
+      description: 'Clear formatting',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    if (newHistory.length > MAX_HISTORY_ENTRIES) {
+      newHistory.splice(0, newHistory.length - MAX_HISTORY_ENTRIES);
+    }
 
     set({
       document: docClone,

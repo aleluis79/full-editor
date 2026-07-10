@@ -535,6 +535,40 @@ export function invertToggleMark(op: ToggleMarkOp): ToggleMarkOp {
 }
 
 // ============================================================
+// ClearFormatting Operation
+// ============================================================
+
+/**
+ * Remove all marks and style attributes from runs within the
+ * selection range, leaving the text content intact.
+ */
+export function applyClearFormatting(
+  doc: DocumentRoot,
+  blockId: NodeId,
+  startOffset: number,
+  endOffset: number
+): void {
+  const block = findNode(doc, blockId);
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return;
+
+  const textBlock = block as Paragraph | Heading;
+  if (startOffset === endOffset) return;
+
+  // Split runs so the range aligns with run boundaries
+  const { startRunIndex, endRunIndex } = splitRunsAtRange(
+    textBlock, startOffset, endOffset
+  );
+  if (startRunIndex < 0) return;
+
+  // Clear marks and attrs from the exact runs covering the range
+  for (let i = startRunIndex; i <= endRunIndex; i++) {
+    const run = textBlock.children[i];
+    run.marks = [];
+    run.attrs = undefined;
+  }
+}
+
+// ============================================================
 // SetStyle Operation
 // ============================================================
 

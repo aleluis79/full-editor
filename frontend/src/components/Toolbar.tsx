@@ -20,6 +20,7 @@ export function Toolbar() {
   const cursor = useEditorStore((s) => s.cursor);
   const toggleMark = useDocumentStore((s) => s.toggleMark);
   const setStyle = useDocumentStore((s) => s.setStyle);
+  const clearFormattingAction = useDocumentStore((s) => s.clearFormatting);
   const insertBlock = useDocumentStore((s) => s.insertBlock);
   const convertBlock = useDocumentStore((s) => s.convertBlock);
 
@@ -41,6 +42,12 @@ export function Toolbar() {
   const handleInsertBlock = (blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => {
     if (!hasCursor) return;
     insertBlock(cursor.position.nodeId, blockType, attrs);
+  };
+
+  const handleClearFormatting = () => {
+    if (!hasSelection) return;
+    const { start, end } = getSelectionRange(selection!);
+    clearFormattingAction(start.nodeId, start.offset, end.offset);
   };
 
   const handleConvertBlock = (toType: BlockType, attrs?: Record<string, unknown>) => {
@@ -83,6 +90,19 @@ export function Toolbar() {
           title="Strikethrough"
         >
           <s>S</s>
+        </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      <div className="toolbar-group">
+        <button
+          className="toolbar-btn"
+          onClick={handleClearFormatting}
+          disabled={!hasSelection}
+          title="Clear Formatting"
+        >
+          <span style={{ fontFamily: 'sans-serif', fontSize: '14px' }}>↺</span>
         </button>
       </div>
 
