@@ -69,6 +69,12 @@ export function DocumentView({ blocks: _blocks, activeBlockId, onBlockMouseDown,
 
   return (
     <div className="document-view" ref={containerRef} onScroll={handleScroll}>
+      {pages.length > 0 && (
+        <PageRuler
+          pageWidth={pages[0].width}
+          contentArea={pages[0].contentArea}
+        />
+      )}
       {pages.map((page, pageIndex) => (
         <PageRenderer
           key={pageIndex}
@@ -590,6 +596,49 @@ function renderHeaderFooterContent(runs: import('../core/types').TextRun[]) {
         </span>
       ))}
     </span>
+  );
+}
+
+// ── Page Ruler ────────────────────────────────────────────
+
+interface PageRulerProps {
+  pageWidth: number;
+  contentArea: { x: number; width: number };
+}
+
+function PageRuler({ pageWidth, contentArea }: PageRulerProps) {
+  const ticks: { pos: number; label: string; major: boolean }[] = [];
+  for (let px = 0; px <= pageWidth; px += 10) {
+    if (px % 50 === 0) {
+      ticks.push({ pos: px, label: px % 100 === 0 ? String(px / 10) : '', major: true });
+    } else {
+      ticks.push({ pos: px, label: '', major: false });
+    }
+  }
+
+  return (
+    <div className="page-ruler" style={{ width: pageWidth }}>
+      <div className="page-ruler-track">
+        {ticks.map((t, i) => (
+          <div
+            key={i}
+            className={`page-ruler-tick ${t.major ? 'major' : 'minor'}`}
+            style={{ left: t.pos }}
+          >
+            {t.label && <span className="page-ruler-label">{t.label}</span>}
+          </div>
+        ))}
+      </div>
+      {/* Margin overlay */}
+      <div
+        className="page-ruler-margin page-ruler-margin-left"
+        style={{ width: contentArea.x, height: '100%' }}
+      />
+      <div
+        className="page-ruler-margin page-ruler-margin-right"
+        style={{ left: contentArea.x + contentArea.width, width: pageWidth - contentArea.x - contentArea.width, height: '100%' }}
+      />
+    </div>
   );
 }
 
