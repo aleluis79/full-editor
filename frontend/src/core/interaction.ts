@@ -140,6 +140,45 @@ export function getPointFromOffset(
 }
 
 /**
+ * Convert a character offset within a block element to a DOM Range
+ * at that exact position. Used to set the browser's native selection
+ * for visual highlighting of keyboard-based selections (Shift+Arrow).
+ *
+ * Returns a collapsed range at the given offset.
+ */
+export function getRangeFromOffset(
+  blockEl: HTMLElement,
+  offset: number
+): Range | null {
+  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
+  let charIndex = 0;
+  let textNode: Text | null;
+
+  while ((textNode = walker.nextNode() as Text | null)) {
+    const nodeLen = textNode.length;
+    if (charIndex + nodeLen >= offset) {
+      const localOffset = Math.min(offset - charIndex, nodeLen);
+      const range = document.createRange();
+      range.setStart(textNode, localOffset);
+      range.collapse(true);
+      return range;
+    }
+    charIndex += nodeLen;
+  }
+
+  // Offset past all text — position after the last child
+  const lastChild = blockEl.lastChild;
+  if (lastChild) {
+    const range = document.createRange();
+    range.setStartAfter(lastChild);
+    range.collapse(true);
+    return range;
+  }
+
+  return null;
+}
+
+/**
  * Convert a DOM node and character offset to a logical position
  * (nodeId + offset) within the document. Used to translate native
  * browser selection ranges to the editor's logical coordinate system.

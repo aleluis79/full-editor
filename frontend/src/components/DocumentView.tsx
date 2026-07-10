@@ -7,6 +7,7 @@ import { useLayoutStore } from '../stores/layout-store';
 import { usePageStore } from '../stores/page-store';
 import { useEditorStore } from '../stores/editor-store';
 import { getBlockNodes } from '../core/document';
+import { isSelectionEmpty } from '../core/selection';
 import { ListBlock } from './ListBlock';
 import { BlockquoteBlock } from './BlockquoteBlock';
 import { HorizontalRuleBlock } from './HorizontalRuleBlock';
@@ -346,6 +347,7 @@ interface LayoutParagraphProps {
 function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockClick, onDoubleClick, onTripleClick }: LayoutParagraphProps) {
   const className = `paragraph ${isActive ? 'active' : ''} ${block.type === 'heading' ? `heading-${(block as Heading).level}` : ''}`;
   const cursor = useEditorStore((s) => s.cursor);
+  const selection = useEditorStore((s) => s.selection);
   const focused = useEditorStore((s) => s.focused);
   const paraRef = useRef<HTMLDivElement>(null);
   const [cursorRect, setCursorRect] = useState<{ x: number; y: number; height: number } | null>(null);
@@ -417,28 +419,93 @@ function LayoutParagraph({ block, layout: _layout, isActive, onClick: onBlockCli
     }
   }, [cursor.position.offset, cursor.position.nodeId, block.id, isActive, focused]);
 
+  // Compute selection range within this block (global offsets)
+  const getBlockSelRange = (): [number, number] | null => {
+    if (!selection || isSelectionEmpty(selection)) return null;
+    const inBlock = (id: string) => id === block.id;
+    const aIn = inBlock(selection.anchor.nodeId);
+    const fIn = inBlock(selection.focus.nodeId);
+    if (!aIn && !fIn) return null;
+
+    const blockLen = block.children.reduce((s, r) => s + r.content.length, 0);
+    if (aIn && fIn) {
+      const s = Math.min(selection.anchor.offset, selection.focus.offset);
+      const e = Math.max(selection.anchor.offset, selection.focus.offset);
+      return [s, e];
+    }
+    if (aIn) return [selection.anchor.offset, blockLen];
+    return [0, selection.focus.offset];
+  };
+
   // Render text directly from block children (always works, no layout dependency)
   const renderTextContent = () => {
     if (!block.children || block.children.length === 0) {
       return <span className="text-run" data-empty="true">{'\u200B'}</span>;
     }
 
-    return block.children.map((run, index) => {
-      const style: React.CSSProperties = {};
-      if (run.marks.includes('bold')) style.fontWeight = 'bold';
-      if (run.marks.includes('italic')) style.fontStyle = 'italic';
-      if (run.marks.includes('underline')) style.textDecoration = 'underline';
-      if (run.marks.includes('strikethrough')) style.textDecoration = 'line-through';
-      if (run.attrs?.fontFamily) style.fontFamily = run.attrs.fontFamily as string;
-      if (run.attrs?.fontSize) style.fontSize = run.attrs.fontSize as number;
-      if (run.attrs?.color) style.color = run.attrs.color as string;
+    const selRange = getBlockSelRange();
+    const SEL_BG = 'rgba(0, 120, 215, 0.3)';
 
-      return (
-        <span key={run.id || index} className="text-run" style={style}>
-          {run.content || '\u200B'}
-        </span>
-      );
+    const parts: React.ReactNode[] = [];
+    let globalOffset = 0;
+
+    block.children.forEach((run, index) => {
+      const runLen = run.content.length;
+      const runStart = globalOffset;
+      const runEnd = runStart + runLen;
+
+      const baseStyle: React.CSSProperties = {};
+      if (run.marks.includes('bold')) baseStyle.fontWeight = 'bold';
+      if (run.marks.includes('italic')) baseStyle.fontStyle = 'italic';
+      if (run.marks.includes('underline')) baseStyle.textDecoration = 'underline';
+      if (run.marks.includes('strikethrough')) baseStyle.textDecoration = 'line-through';
+      if (run.attrs?.fontFamily) baseStyle.fontFamily = run.attrs.fontFamily as string;
+      if (run.attrs?.fontSize) baseStyle.fontSize = run.attrs.fontSize as number;
+      if (run.attrs?.color) baseStyle.color = run.attrs.color as string;
+
+      const content = run.content || '\u200B';
+
+      if (!selRange || runEnd <= selRange[0] || runStart >= selRange[1]) {
+        // Entire run outside selection — single span
+        parts.push(
+          <span key={run.id || index} className="text-run" style={baseStyle}>
+            {content}
+          </span>
+        );
+      } else {
+        // Run overlaps selection — split into up to 3 parts
+        const selStart = Math.max(0, selRange[0] - runStart);
+        const selEnd = Math.min(runLen, selRange[1] - runStart);
+
+        if (selStart > 0) {
+          parts.push(
+            <span key={`${run.id || index}-pre`} className="text-run" style={baseStyle}>
+              {content.slice(0, selStart)}
+            </span>
+          );
+        }
+        parts.push(
+          <span
+            key={`${run.id || index}-sel`}
+            className="text-run"
+            style={{ ...baseStyle, backgroundColor: SEL_BG }}
+          >
+            {content.slice(selStart, selEnd)}
+          </span>
+        );
+        if (selEnd < runLen) {
+          parts.push(
+            <span key={`${run.id || index}-post`} className="text-run" style={baseStyle}>
+              {content.slice(selEnd)}
+            </span>
+          );
+        }
+      }
+
+      globalOffset += runLen;
     });
+
+    return <>{parts}</>;
   };
 
   return (

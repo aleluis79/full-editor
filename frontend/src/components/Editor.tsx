@@ -491,6 +491,8 @@ export function Editor() {
             e.preventDefault();
             const { start, end } = getSelectionRange(selection!);
             toggleMark(start.nodeId, start.offset, end.offset, 'bold');
+            clearSelection();
+            setCursorPosition(end);
           } else {
             e.preventDefault();
             if (hasSelection) {
@@ -510,6 +512,8 @@ export function Editor() {
             e.preventDefault();
             const { start, end } = getSelectionRange(selection!);
             toggleMark(start.nodeId, start.offset, end.offset, 'italic');
+            clearSelection();
+            setCursorPosition(end);
           } else {
             e.preventDefault();
             if (hasSelection) {
@@ -529,6 +533,8 @@ export function Editor() {
             e.preventDefault();
             const { start, end } = getSelectionRange(selection!);
             toggleMark(start.nodeId, start.offset, end.offset, 'underline');
+            clearSelection();
+            setCursorPosition(end);
           } else {
             e.preventDefault();
             if (hasSelection) {
@@ -613,11 +619,9 @@ export function Editor() {
       const clampedAnchor = clampCursor(doc, { position: anchorPos }).position;
 
       if (sel.isCollapsed) {
-        // Pure cursor movement — update cursor position only
         setCursorPosition(clampedAnchor);
         clearSelection();
       } else {
-        // Real selection — update both cursor and selection
         const focusPos = sel.focusNode
           ? nodeToLogicalPosition(sel.focusNode, sel.focusOffset)
           : null;
