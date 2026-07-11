@@ -14,7 +14,6 @@ import {
 import { selectWord, selectParagraph, getSelectedText, getSelectionRange, isSelectionEmpty } from '../core/selection';
 import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition } from '../core/interaction';
 import { DocumentView } from './DocumentView';
-import { CursorOverlay } from './Cursor';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
 
@@ -35,6 +34,7 @@ export function Editor({ onBack }: EditorProps) {
   const mergeBlocks = useDocumentStore((s) => s.mergeBlocks);
 
   const cursor = useEditorStore((s) => s.cursor);
+  const focused = useEditorStore((s) => s.focused);
   const selection = useEditorStore((s) => s.selection);
   const setCursorPosition = useEditorStore((s) => s.setCursorPosition);
   const setSelection = useEditorStore((s) => s.setSelection);
@@ -103,7 +103,7 @@ export function Editor({ onBack }: EditorProps) {
       setTimeout(() => {
         justFinishedDrag.current = false;
         // Re-focus the textarea so keyboard input works after drag-select
-        textareaRef.current?.focus();
+        textareaRef.current?.focus({ preventScroll: true });
       }, 50);
     };
     document.addEventListener('mousemove', handleMouseMove);
@@ -140,7 +140,7 @@ export function Editor({ onBack }: EditorProps) {
         setCursorPosition({ nodeId: blockId, offset: 0 });
       }
       clearSelection();
-      textareaRef.current?.focus();
+      textareaRef.current?.focus({ preventScroll: true });
     },
     [setCursorPosition, clearSelection]
   );
@@ -670,6 +670,29 @@ export function Editor({ onBack }: EditorProps) {
     }
   }, [layout, paginate]);
 
+  // Auto-scroll to keep cursor visible — when the cursor moves to a block
+  // that's outside the viewport, scroll it into view. Uses rAF to wait for
+  // layout after state changes without forcing a synchronous reflow.
+  useEffect(() => {
+    const { nodeId } = cursor.position;
+    if (!nodeId || !focused) return;
+
+    const raf = requestAnimationFrame(() => {
+      const blockEl = document.querySelector(
+        `[data-block-id="${nodeId}"]`
+      ) as HTMLElement | null;
+      if (!blockEl) return;
+
+      const rect = blockEl.getBoundingClientRect();
+      // Only scroll if the block is mostly outside the viewport
+      if (rect.top > window.innerHeight - 20 || rect.bottom < 20) {
+        blockEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [cursor.position, focused]);
+
   // Sync browser native selection to editor state — without this, text
   // selected by mouse drag is invisible to the toolbar and keyboard
   // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
@@ -736,7 +759,6 @@ export function Editor({ onBack }: EditorProps) {
         onTripleClick={handleTripleClick}
       />
 
-      <CursorOverlay />
       <SelectionOverlay />
     </div>
   );
