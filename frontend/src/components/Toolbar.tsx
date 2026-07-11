@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { getSelectionRange, isSelectionEmpty } from '../core/selection';
+import { getRunStylesAtOffset, findNode, getBlockNodes } from '../core/document';
 import { exportPDF } from '../api/client';
 import { usePageStore } from '../stores/page-store';
 import { useLayoutStore } from '../stores/layout-store';
-import type { MarkType, StyleAttrs, BlockType } from '../core/types';
+import type { MarkType, StyleAttrs, BlockType, Paragraph, Heading } from '../core/types';
 
 const FONT_FAMILIES = [
   'Georgia',
@@ -26,6 +27,11 @@ interface ToolbarProps {
 export function Toolbar({ onBack }: ToolbarProps) {
   const selection = useEditorStore((s) => s.selection);
   const cursor = useEditorStore((s) => s.cursor);
+  const stickyMarks = useEditorStore((s) => s.stickyMarks);
+  const stickyAttrs = useEditorStore((s) => s.stickyAttrs);
+  const toggleStickyMark = useEditorStore((s) => s.toggleStickyMark);
+  const setStickyStyle = useEditorStore((s) => s.setStickyStyle);
+  const clearStickyMarks = useEditorStore((s) => s.clearStickyMarks);
   const toggleMark = useDocumentStore((s) => s.toggleMark);
   const setStyle = useDocumentStore((s) => s.setStyle);
   const clearFormattingAction = useDocumentStore((s) => s.clearFormatting);
@@ -53,30 +59,73 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   const hasSelection = selection && !isSelectionEmpty(selection);
   const hasCursor = cursor.position.nodeId !== '';
-  const startBlock = selection?.anchor.nodeId ?? '';
-  const endBlock = selection?.focus.nodeId ?? '';
+
+  // ── Active styles at cursor ────────────────────────────────
+  // Derive the marks and attrs at the current cursor position so
+  // the toolbar can reflect what style is under the cursor.
+  const activeStyles = useMemo(() => {
+    const { nodeId, offset } = cursor.position;
+    if (!nodeId) return null;
+
+    const block = findNode(doc, nodeId);
+    if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return null;
+
+    return getRunStylesAtOffset(block as Paragraph | Heading, offset);
+  }, [doc, cursor.position.nodeId, cursor.position.offset]);
+
+  // Effective marks: when the user has toggled sticky marks, show those
+  // (they determine what will be applied on next keystroke). Otherwise,
+  // fall back to the marks at the cursor position (toolbar reflection).
+  const effectiveMarks = useMemo(() => {
+    if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
+      return new Set(stickyMarks);
+    }
+    return new Set(activeStyles?.marks ?? []);
+  }, [stickyMarks, stickyAttrs, activeStyles]);
+
+  const effectiveAttrs: Partial<StyleAttrs> = useMemo(() => {
+    if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
+      return stickyAttrs;
+    }
+    return activeStyles?.attrs ?? {};
+  }, [stickyMarks, stickyAttrs, activeStyles]);
+
+  // ── Handlers ───────────────────────────────────────────────
 
   const handleToggleMark = (mark: MarkType) => {
-    if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!, doc);
-    toggleMark(start.nodeId, start.offset, end.offset, mark, end.nodeId);
+    if (hasSelection) {
+      const { start, end } = getSelectionRange(selection!, doc);
+      toggleMark(start.nodeId, start.offset, end.offset, mark, end.nodeId);
+      // Clear sticky state since we acted on a real selection
+      clearStickyMarks();
+    } else {
+      // No selection: toggle sticky mark — next typed text will use it
+      toggleStickyMark(mark);
+    }
   };
 
   const handleSetStyle = (key: keyof StyleAttrs, value: string | number | undefined) => {
-    if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!, doc);
-    setStyle(start.nodeId, start.offset, end.offset, key, value, end.nodeId);
+    if (hasSelection) {
+      const { start, end } = getSelectionRange(selection!, doc);
+      setStyle(start.nodeId, start.offset, end.offset, key, value, end.nodeId);
+      clearStickyMarks();
+    } else if (hasCursor) {
+      // No selection: set sticky style for next typed text
+      setStickyStyle(key, value);
+    }
+  };
+
+  const handleClearFormatting = () => {
+    if (hasSelection) {
+      const { start, end } = getSelectionRange(selection!, doc);
+      clearFormattingAction(start.nodeId, start.offset, end.offset, end.nodeId);
+    }
+    clearStickyMarks();
   };
 
   const handleInsertBlock = (blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => {
     if (!hasCursor) return;
     insertBlock(cursor.position.nodeId, blockType, attrs);
-  };
-
-  const handleClearFormatting = () => {
-    if (!hasSelection) return;
-    const { start, end } = getSelectionRange(selection!, doc);
-    clearFormattingAction(start.nodeId, start.offset, end.offset, end.nodeId);
   };
 
   const handleConvertBlock = (toType: BlockType, attrs?: Record<string, unknown>) => {
@@ -95,10 +144,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const handleExportPDF = useCallback(async () => {
     const { document, documentTitle } = useDocumentStore.getState();
     try {
-      // Get page breaks from the pagination engine
       const { pages } = usePageStore.getState();
-      // For each page after the first, the first block of that page needs a break before it.
-      // We send the *last block of each page* as the break point (break goes after it).
       const breakIds: string[] = [];
       for (let i = 1; i < pages.length; i++) {
         const prevPageBlocks = pages[i - 1].blocks;
@@ -129,8 +175,54 @@ export function Toolbar({ onBack }: ToolbarProps) {
     []
   );
 
+  // ── Determine active block type for the block selector ─────
+  const activeBlockType = useMemo(() => {
+    const { nodeId } = cursor.position;
+    if (!nodeId) return 'paragraph';
+    const block = findNode(doc, nodeId);
+    if (!block) return 'paragraph';
+
+    if (block.type === 'heading') {
+      const h = block as Heading;
+      return `heading${h.level}` as const;
+    }
+    if (block.type === 'blockquote') return 'blockquote';
+    if (block.type === 'list') {
+      const l = block as import('../core/types').List;
+      return l.ordered ? 'list-ol' : 'list-ul';
+    }
+    // For blocks inside list items / blockquotes, walk up to find the parent
+    if (block.type === 'paragraph' || block.type === 'listItem') {
+      const parent = getBlockNodes(doc).find((b) => {
+        if (b.type === 'list' || b.type === 'blockquote') {
+          const children = 'children' in b ? (b as any).children : [];
+          return children.some((c: any) =>
+            c.id === block.id ||
+            (c.children && c.children.some((cc: any) => cc.id === block.id))
+          );
+        }
+        return false;
+      });
+      if (parent?.type === 'list') {
+        const l = parent as import('../core/types').List;
+        return l.ordered ? 'list-ol' : 'list-ul';
+      }
+      if (parent?.type === 'blockquote') return 'blockquote';
+    }
+    return 'paragraph';
+  }, [doc, cursor.position.nodeId]);
+
+  // Prevent toolbar button clicks from stealing focus from the hidden
+  // textarea. Without this, clicking any <button> blurs the textarea
+  // and keyboard input stops working.
+  const handleToolbarMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).tagName === 'BUTTON') {
+      e.preventDefault();
+    }
+  }, []);
+
   return (
-    <div className="toolbar">
+    <div className="toolbar" onMouseDown={handleToolbarMouseDown}>
       {/* Document controls */}
       <div className="toolbar-group">
         {onBack && (
@@ -218,36 +310,32 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Text formatting */}
+      {/* Text formatting — active state reflects cursor position OR sticky marks */}
       <div className="toolbar-group">
         <button
-          className="toolbar-btn"
+          className={`toolbar-btn${effectiveMarks.has('bold') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('bold')}
-          disabled={!hasSelection}
           title="Bold (Ctrl+B)"
         >
           <strong>B</strong>
         </button>
         <button
-          className="toolbar-btn"
+          className={`toolbar-btn${effectiveMarks.has('italic') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('italic')}
-          disabled={!hasSelection}
           title="Italic (Ctrl+I)"
         >
           <em>I</em>
         </button>
         <button
-          className="toolbar-btn"
+          className={`toolbar-btn${effectiveMarks.has('underline') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('underline')}
-          disabled={!hasSelection}
           title="Underline (Ctrl+U)"
         >
           <u>U</u>
         </button>
         <button
-          className="toolbar-btn"
+          className={`toolbar-btn${effectiveMarks.has('strikethrough') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('strikethrough')}
-          disabled={!hasSelection}
           title="Strikethrough"
         >
           <s>S</s>
@@ -261,8 +349,14 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection && startBlock !== endBlock) {
-              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'left' });
+            if (hasSelection) {
+              const startBlock = selection!.anchor.nodeId;
+              const endBlock = selection!.focus.nodeId;
+              if (startBlock !== endBlock) {
+                setBlockAttrsRange(startBlock, endBlock, { textAlign: 'left' });
+              } else {
+                setBlockAttrs(startBlock, { textAlign: 'left' });
+              }
             } else if (hasCursor) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'left' });
             }
@@ -275,8 +369,14 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection && startBlock !== endBlock) {
-              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'center' });
+            if (hasSelection) {
+              const startBlock = selection!.anchor.nodeId;
+              const endBlock = selection!.focus.nodeId;
+              if (startBlock !== endBlock) {
+                setBlockAttrsRange(startBlock, endBlock, { textAlign: 'center' });
+              } else {
+                setBlockAttrs(startBlock, { textAlign: 'center' });
+              }
             } else if (hasCursor) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'center' });
             }
@@ -289,8 +389,14 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection && startBlock !== endBlock) {
-              setBlockAttrsRange(startBlock, endBlock, { textAlign: 'right' });
+            if (hasSelection) {
+              const startBlock = selection!.anchor.nodeId;
+              const endBlock = selection!.focus.nodeId;
+              if (startBlock !== endBlock) {
+                setBlockAttrsRange(startBlock, endBlock, { textAlign: 'right' });
+              } else {
+                setBlockAttrs(startBlock, { textAlign: 'right' });
+              }
             } else if (hasCursor) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'right' });
             }
@@ -308,7 +414,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={handleClearFormatting}
-          disabled={!hasSelection}
+          disabled={!hasSelection && stickyMarks.length === 0 && Object.keys(stickyAttrs).length === 0}
           title="Clear Formatting"
         >
           <span style={{ fontFamily: 'sans-serif', fontSize: '14px' }}>↺</span>
@@ -317,14 +423,15 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Font */}
+      {/* Font — shows active value from cursor position / sticky attrs */}
       <div className="toolbar-group">
         <select
           className="toolbar-select"
-          onChange={(e) => handleSetStyle('fontFamily', e.target.value)}
-          disabled={!hasSelection}
+          value={effectiveAttrs.fontFamily ?? ''}
+          onChange={(e) => handleSetStyle('fontFamily', e.target.value || undefined)}
           title="Font Family"
         >
+          <option value="">—</option>
           {FONT_FAMILIES.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
@@ -332,10 +439,11 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
         <select
           className="toolbar-select toolbar-select-small"
-          onChange={(e) => handleSetStyle('fontSize', Number(e.target.value))}
-          disabled={!hasSelection}
+          value={effectiveAttrs.fontSize ? String(effectiveAttrs.fontSize) : ''}
+          onChange={(e) => handleSetStyle('fontSize', e.target.value ? Number(e.target.value) : undefined)}
           title="Font Size"
         >
+          <option value="">—</option>
           {FONT_SIZES.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -344,15 +452,15 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Color */}
+      {/* Color — shows active value from cursor position / sticky attrs */}
       <div className="toolbar-group">
         <label className="toolbar-color-label" title="Text Color">
-          A
+          <span style={{ color: effectiveAttrs.color ?? '#000' }}>A</span>
           <input
             type="color"
             className="toolbar-color-input"
+            value={effectiveAttrs.color ?? '#000000'}
             onChange={(e) => handleSetStyle('color', e.target.value)}
-            disabled={!hasSelection}
           />
         </label>
       </div>
@@ -363,6 +471,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
       <div className="toolbar-group">
         <select
           className="toolbar-select"
+          value={activeBlockType}
           onChange={(e) => {
             const value = e.target.value;
             if (value === 'paragraph') {

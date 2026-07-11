@@ -15,6 +15,7 @@ import type {
   BlockNode,
   NodeId,
   MarkType,
+  StyleAttrs,
 } from './types';
 import { hasChildren } from './types';
 
@@ -324,4 +325,34 @@ export function getNextBlock(
   const blocks = getBlockNodes(doc);
   const idx = blocks.findIndex((b) => b.id === blockId);
   return idx >= 0 && idx < blocks.length - 1 ? blocks[idx + 1] : null;
+}
+
+/**
+ * Get the marks and style attrs of the TextRun at the given offset
+ * within a text block. Used to determine what styles are active at
+ * the cursor position for toolbar reflection and sticky marks.
+ */
+export function getRunStylesAtOffset(
+  block: Paragraph | Heading,
+  offset: number
+): { marks: MarkType[]; attrs?: StyleAttrs } | null {
+  if (block.children.length === 0) return null;
+
+  let accumulated = 0;
+  for (const run of block.children) {
+    if (offset <= accumulated + run.content.length) {
+      return {
+        marks: [...run.marks],
+        attrs: run.attrs ? { ...run.attrs } : undefined,
+      };
+    }
+    accumulated += run.content.length;
+  }
+
+  // Past all text — return last run's styles
+  const lastRun = block.children[block.children.length - 1];
+  return {
+    marks: [...lastRun.marks],
+    attrs: lastRun.attrs ? { ...lastRun.attrs } : undefined,
+  };
 }

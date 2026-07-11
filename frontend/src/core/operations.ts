@@ -8,6 +8,8 @@ import type {
   TextRun,
   BlockNode,
   NodeId,
+  MarkType,
+  StyleAttrs,
   InsertTextOp,
   DeleteTextOp,
   SplitBlockOp,
@@ -63,19 +65,21 @@ export function createInsertTextOp(
   };
 }
 
-export function applyInsertText(doc: DocumentRoot, op: InsertTextOp): void {
+export function applyInsertText(
+  doc: DocumentRoot,
+  op: InsertTextOp,
+  marks?: MarkType[],
+  attrs?: StyleAttrs,
+): void {
   const block = findNode(doc, op.blockId);
-  console.log('findNode result:', block ? { id: block.id, type: block.type } : null);
 
   if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
     throw new Error(`Block ${op.blockId} not found or is not a text block`);
   }
 
   const textBlock = block as Paragraph | Heading;
-  console.log('textBlock children:', textBlock.children?.length);
 
   const { runIndex, localOffset } = findRunAtOffset(textBlock, op.offset);
-  console.log('findRunAtOffset result:', { runIndex, localOffset });
 
   const run = textBlock.children[runIndex];
   if (!run) {
@@ -83,10 +87,46 @@ export function applyInsertText(doc: DocumentRoot, op: InsertTextOp): void {
     return;
   }
 
-  run.content =
-    run.content.slice(0, localOffset) + op.text + run.content.slice(localOffset);
+  // Check if sticky marks/attrs differ from the current run's marks.
+  // If they do, split the run and insert a new run with the given marks/attrs.
+  const marksDiffer = marks && (marks.length !== run.marks.length ||
+    marks.some((m, i) => m !== run.marks[i]));
+  const attrsDefined = attrs && Object.keys(attrs).length > 0;
+  const attrsDiffer = attrsDefined && JSON.stringify(attrs) !== JSON.stringify(run.attrs ?? {});
 
-  console.log('After insertText, run content:', run.content);
+  if ((marksDiffer || attrsDiffer) && textBlock.children.length > 0) {
+    // Split existing run at insertion point
+    const beforeContent = run.content.slice(0, localOffset);
+    const afterContent = run.content.slice(localOffset);
+
+    const newRun: TextRun = {
+      id: createId(),
+      type: 'text',
+      content: op.text,
+      marks: marks ?? [],
+      attrs: attrs ?? run.attrs,
+    };
+
+    const replacement = [run, run]; // placeholder — replace below
+    // Build the replacement runs
+    const newRuns: TextRun[] = [];
+
+    if (beforeContent) {
+      newRuns.push({ ...run, content: beforeContent });
+    }
+    newRuns.push(newRun);
+    if (afterContent) {
+      newRuns.push({ ...run, content: afterContent });
+      // If the after-run is empty in its current state (run had only before+text),
+      // keep it as a placeholder for cursor positioning
+    }
+
+    textBlock.children.splice(runIndex, 1, ...newRuns);
+  } else {
+    // Same marks/attrs or no overrides — insert into existing run
+    run.content =
+      run.content.slice(0, localOffset) + op.text + run.content.slice(localOffset);
+  }
 }
 
 export function invertInsertText(op: InsertTextOp): DeleteTextOp {

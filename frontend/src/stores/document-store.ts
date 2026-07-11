@@ -32,6 +32,7 @@ import {
   applyOperation,
 } from '../core/operations';
 import { deleteSelection, isSelectionEmpty, getSelectionRange } from '../core/selection';
+import { useEditorStore } from './editor-store';
 import { createDocument as apiCreateDoc, updateDocument as apiUpdateDoc, fetchDocument as apiFetchDoc } from '../api/client';
 import { usePageStore } from './page-store';
 
@@ -238,8 +239,13 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     const now = Date.now();
     const timeSinceLastOp = now - lastOperationTime;
 
-    // Log for debugging
-    console.log('insertText called:', { blockId, offset, text, docChildren: document.children.length });
+    // Read sticky marks/attrs from the editor store. When set, they
+    // represent toggled styles the user wants applied to new text.
+    const editorState = useEditorStore.getState();
+    const stickyMarks = editorState.stickyMarks;
+    const stickyAttrs = editorState.stickyAttrs;
+    const stickyBreakOut = editorState.stickyBreakOut;
+    const hasStickyMarks = stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0;
 
     // Create a deep clone for immutable update
     const docClone = cloneDocument(document);
@@ -252,10 +258,24 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       text,
     };
 
-    // Apply the operation to the clone
+    // Apply the operation to the clone — pass sticky marks/attrs so
+    // applyInsertText can create a properly styled run if needed.
     try {
-      applyInsertText(docClone, op);
-      console.log('applyInsertText succeeded');
+      if (stickyBreakOut) {
+        // User just toggled all sticky marks OFF. Force a plain run to
+        // break out of the current run's inherited marks (e.g., cursor
+        // is on bold text, user turned off bold, next char should be plain).
+        applyInsertText(docClone, op, [], {});
+        useEditorStore.getState().consumeStickyBreakOut();
+      } else if (hasStickyMarks) {
+        applyInsertText(
+          docClone, op,
+          stickyMarks,
+          Object.keys(stickyAttrs).length > 0 ? stickyAttrs as StyleAttrs : undefined,
+        );
+      } else {
+        applyInsertText(docClone, op);
+      }
     } catch (e) {
       console.error('applyInsertText failed:', e, { blockId, offset, text });
       return;

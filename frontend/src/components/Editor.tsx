@@ -48,6 +48,11 @@ export function Editor({ onBack }: EditorProps) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Tracks active IME composition (dead keys, CJK, etc.). During
+  // composition, the keydown handler must NOT process keys so the
+  // browser can compose the character naturally. compositionEnd
+  // captures the final composed text.
+  const isComposingRef = useRef(false);
 
   const blocks = getBlockNodes(doc);
   const activeBlockId = cursor.position.nodeId || blocks[0]?.id || null;
@@ -241,6 +246,11 @@ export function Editor({ onBack }: EditorProps) {
     (e: React.KeyboardEvent) => {
       const { nodeId, offset } = cursor.position;
       if (!nodeId) return;
+
+      // During IME composition (dead keys, input methods), let the
+      // browser handle key events naturally. We capture the final
+      // composed text via onCompositionEnd.
+      if (isComposingRef.current) return;
 
       const hasSelection = selection && !(
         selection.anchor.nodeId === selection.focus.nodeId &&
@@ -833,6 +843,23 @@ export function Editor({ onBack }: EditorProps) {
         onKeyDown={handleKeyDown}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        onCompositionStart={() => { isComposingRef.current = true; }}
+        onCompositionEnd={(e) => {
+          isComposingRef.current = false;
+          const text = e.data;
+          if (!text || !cursor.position.nodeId) return;
+
+          const { nodeId, offset } = cursor.position;
+          const hasSel = selection && !isSelectionEmpty(selection);
+          if (hasSel) {
+            const result = replaceSelection(selection!, text);
+            setCursorPosition(result.newCursorPosition);
+            clearSelection();
+          } else {
+            insertText(nodeId, offset, text);
+            setCursorPosition({ nodeId, offset: offset + text.length });
+          }
+        }}
         autoFocus
       />
 

@@ -50,7 +50,7 @@ body {
 
 /* Hidden textarea for keyboard capture */
 .hidden-textarea {
-  position: absolute;
+  position: fixed;
   top: -9999px;
   left: -9999px;
   width: 1px;
@@ -334,6 +334,12 @@ body {
 
 .toolbar-btn:active:not(:disabled) {
   background: #d0d0d0;
+}
+
+.toolbar-btn-active {
+  background: #d0e4ff !important;
+  border-color: #0078d4 !important;
+  color: #0078d4;
 }
 
 .toolbar-select {
