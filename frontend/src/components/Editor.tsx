@@ -332,6 +332,92 @@ export function Editor({ onBack }: EditorProps) {
           break;
         }
 
+        case 'PageDown': {
+          e.preventDefault();
+          const { nodeId: pdNodeId, offset: pdOffset } = cursor.position;
+          const pdBlockEl = document.querySelector(
+            `[data-block-id="${pdNodeId}"]`
+          ) as HTMLElement | null;
+          if (!pdBlockEl) break;
+
+          const pdScreenPos = getPointFromOffset(pdBlockEl, pdOffset);
+          if (!pdScreenPos) break;
+
+          const pdPageSize = window.innerHeight * 0.9;
+          // Try multiple epsilons to skip gaps (page numbers, margins, etc.)
+          let pdResult: { blockId: string; offset: number } | null = null;
+          for (const eps of [1, 20, 40]) {
+            pdResult = hitTest(pdScreenPos.x, pdScreenPos.y + pdPageSize + eps);
+            if (pdResult && (pdResult.blockId !== pdNodeId || pdResult.offset !== pdOffset)) break;
+            pdResult = null;
+          }
+
+          if (pdResult) {
+            if (e.shiftKey) {
+              extendSelection({ nodeId: pdResult.blockId, offset: pdResult.offset });
+            } else {
+              clearSelection();
+            }
+            setCursorPosition({ nodeId: pdResult.blockId, offset: pdResult.offset });
+          } else {
+            // Fallback: go to last block
+            const allBlocks = getBlockNodes(doc);
+            if (allBlocks.length > 0) {
+              const last = allBlocks[allBlocks.length - 1];
+              const lastText = useDocumentStore.getState().getBlockText(last.id);
+              if (e.shiftKey) {
+                extendSelection({ nodeId: last.id, offset: lastText.length });
+              } else {
+                clearSelection();
+              }
+              setCursorPosition({ nodeId: last.id, offset: lastText.length });
+            }
+          }
+          break;
+        }
+
+        case 'PageUp': {
+          e.preventDefault();
+          const { nodeId: puNodeId, offset: puOffset } = cursor.position;
+          const puBlockEl = document.querySelector(
+            `[data-block-id="${puNodeId}"]`
+          ) as HTMLElement | null;
+          if (!puBlockEl) break;
+
+          const puScreenPos = getPointFromOffset(puBlockEl, puOffset);
+          if (!puScreenPos) break;
+
+          const puPageSize = window.innerHeight * 0.9;
+          let puResult: { blockId: string; offset: number } | null = null;
+          for (const eps of [1, 20, 40]) {
+            puResult = hitTest(puScreenPos.x, puScreenPos.y - puPageSize - eps);
+            if (puResult && (puResult.blockId !== puNodeId || puResult.offset !== puOffset)) break;
+            puResult = null;
+          }
+
+          if (puResult) {
+            if (e.shiftKey) {
+              extendSelection({ nodeId: puResult.blockId, offset: puResult.offset });
+            } else {
+              clearSelection();
+            }
+            setCursorPosition({ nodeId: puResult.blockId, offset: puResult.offset });
+          } else {
+            // Fallback: go to first block
+            const allBlocks = getBlockNodes(doc);
+            if (allBlocks.length > 0) {
+              const first = allBlocks[0];
+              if (e.shiftKey) {
+                extendSelection({ nodeId: first.id, offset: 0 });
+              } else {
+                clearSelection();
+              }
+              setCursorPosition({ nodeId: first.id, offset: 0 });
+            }
+          }
+          break;
+        }
+
         case 'Home': {
           e.preventDefault();
           if (e.shiftKey) {
