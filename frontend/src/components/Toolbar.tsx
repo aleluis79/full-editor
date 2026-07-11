@@ -29,6 +29,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const cursor = useEditorStore((s) => s.cursor);
   const stickyMarks = useEditorStore((s) => s.stickyMarks);
   const stickyAttrs = useEditorStore((s) => s.stickyAttrs);
+  const stickyBreakOut = useEditorStore((s) => s.stickyBreakOut);
   const toggleStickyMark = useEditorStore((s) => s.toggleStickyMark);
   const setStickyStyle = useEditorStore((s) => s.setStickyStyle);
   const clearStickyMarks = useEditorStore((s) => s.clearStickyMarks);
@@ -76,19 +77,23 @@ export function Toolbar({ onBack }: ToolbarProps) {
   // Effective marks: when the user has toggled sticky marks, show those
   // (they determine what will be applied on next keystroke). Otherwise,
   // fall back to the marks at the cursor position (toolbar reflection).
+  // When stickyBreakOut is true, the user just turned off all sticky
+  // marks — show nothing as active until the first character is typed.
   const effectiveMarks = useMemo(() => {
+    if (stickyBreakOut) return new Set<MarkType>();
     if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
       return new Set(stickyMarks);
     }
     return new Set(activeStyles?.marks ?? []);
-  }, [stickyMarks, stickyAttrs, activeStyles]);
+  }, [stickyMarks, stickyAttrs, stickyBreakOut, activeStyles]);
 
   const effectiveAttrs: Partial<StyleAttrs> = useMemo(() => {
+    if (stickyBreakOut) return {};
     if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
       return stickyAttrs;
     }
     return activeStyles?.attrs ?? {};
-  }, [stickyMarks, stickyAttrs, activeStyles]);
+  }, [stickyMarks, stickyAttrs, stickyBreakOut, activeStyles]);
 
   // ── Handlers ───────────────────────────────────────────────
 
@@ -215,8 +220,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
   // Prevent toolbar button clicks from stealing focus from the hidden
   // textarea. Without this, clicking any <button> blurs the textarea
   // and keyboard input stops working.
+  // Using closest('button') because the click target may be a child
+  // element inside the button (e.g. <strong>, <em>, <span>, <u>).
   const handleToolbarMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).tagName === 'BUTTON') {
+    if ((e.target as HTMLElement).closest('button')) {
       e.preventDefault();
     }
   }, []);
