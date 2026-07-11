@@ -465,7 +465,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Color — shows active value from cursor position / sticky attrs */}
+      {/* Text Color — shows active value from cursor position / sticky attrs */}
       <div className="toolbar-group">
         <label className="toolbar-color-label" title="Text Color">
           <span style={{ color: effectiveAttrs.color ?? '#000' }}>A</span>
@@ -476,6 +476,34 @@ export function Toolbar({ onBack }: ToolbarProps) {
             onChange={(e) => handleSetStyle('color', e.target.value)}
           />
         </label>
+      </div>
+
+      {/* Highlight (background) Color */}
+      <div className="toolbar-group">
+        <label className="toolbar-color-label" title="Highlight Color">
+          <span style={{
+            backgroundColor: effectiveAttrs.backgroundColor ?? '#fff7d6',
+            padding: '0 2px',
+          }}>
+            <span style={{ color: '#000' }}>A</span>
+          </span>
+          <input
+            type="color"
+            className="toolbar-color-input"
+            value={effectiveAttrs.backgroundColor ?? '#ffff00'}
+            onChange={(e) => handleSetStyle('backgroundColor', e.target.value)}
+          />
+        </label>
+        {effectiveAttrs.backgroundColor && (
+          <button
+            className="toolbar-btn"
+            onClick={() => handleSetStyle('backgroundColor', undefined)}
+            title="Remove highlight"
+            style={{ fontSize: '14px', width: '24px', height: '24px', marginLeft: '2px' }}
+          >
+            ×
+          </button>
+        )}
       </div>
 
       <div className="toolbar-separator" />

@@ -331,6 +331,11 @@ class PDFExporter:
                 if "strikethrough" in marks:
                     content = f"<strike>{content}</strike>"
                 
+                # Apply background color via ReportLab <span backcolor="...">
+                bg = attrs.get("backgroundColor")
+                if bg and isinstance(bg, str):
+                    content = f'<span backcolor="{bg}">{content}</span>'
+
                 # Apply inline style tags from attrs (font size, family, color)
                 font_attrs = []
                 fs = attrs.get("fontSize")

@@ -492,6 +492,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
       if (run.attrs?.fontFamily) baseStyle.fontFamily = run.attrs.fontFamily as string;
       if (run.attrs?.fontSize) baseStyle.fontSize = run.attrs.fontSize as number;
       if (run.attrs?.color) baseStyle.color = run.attrs.color as string;
+      if (run.attrs?.backgroundColor) baseStyle.backgroundColor = run.attrs.backgroundColor as string;
 
       const content = run.content || '\u200B';
 
@@ -590,6 +591,7 @@ function renderHeaderFooterContent(runs: import('../core/types').TextRun[]) {
             fontFamily: run.attrs?.fontFamily,
             fontSize: run.attrs?.fontSize,
             color: run.attrs?.color,
+            backgroundColor: run.attrs?.backgroundColor,
           }}
         >
           {run.content}

@@ -140,6 +140,7 @@ function LayoutParagraph({ block, layout, isActive, onClick, onDoubleClick, onTr
                     run.strikethrough ? 'line-through' : '',
                   ].filter(Boolean).join(' ') || 'none',
                   color: run.color,
+                  backgroundColor: run.attrs?.backgroundColor,
                 }}
               >
                 {run.text}
@@ -178,6 +179,7 @@ function LayoutParagraph({ block, layout, isActive, onClick, onDoubleClick, onTr
             fontFamily: run.attrs?.fontFamily,
             fontSize: run.attrs?.fontSize,
             color: run.attrs?.color,
+            backgroundColor: run.attrs?.backgroundColor,
           }}
         >
           {run.content}
