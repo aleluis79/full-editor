@@ -717,6 +717,20 @@ export function Editor({ onBack }: EditorProps) {
           break;
         }
 
+        case 'Tab': {
+          e.preventDefault();
+          const indent = '    '; // 4 spaces
+          if (hasSelection) {
+            const result = replaceSelection(selection!, indent);
+            setCursorPosition(result.newCursorPosition);
+            clearSelection();
+          } else {
+            insertText(nodeId, offset, indent);
+            setCursorPosition({ nodeId, offset: offset + indent.length });
+          }
+          break;
+        }
+
         default: {
           if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();

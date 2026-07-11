@@ -440,11 +440,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
       <div className="toolbar-group">
         <select
           className="toolbar-select"
-          value={effectiveAttrs.fontFamily ?? ''}
+          value={effectiveAttrs.fontFamily ?? 'Georgia'}
           onChange={(e) => handleSetStyle('fontFamily', e.target.value || undefined)}
           title="Font Family"
         >
-          <option value="">—</option>
           {FONT_FAMILIES.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
@@ -452,11 +451,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
         <select
           className="toolbar-select toolbar-select-small"
-          value={effectiveAttrs.fontSize ? String(effectiveAttrs.fontSize) : ''}
+          value={effectiveAttrs.fontSize ? String(effectiveAttrs.fontSize) : '16'}
           onChange={(e) => handleSetStyle('fontSize', e.target.value ? Number(e.target.value) : undefined)}
           title="Font Size"
         >
-          <option value="">—</option>
           {FONT_SIZES.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
