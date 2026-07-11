@@ -10,6 +10,10 @@ interface EditorState {
   selection: Selection | null;
   focused: boolean;
   clickCount: number; // 1 = single, 2 = double, 3 = triple
+  /** Monotonically increasing counter that increments on every
+   *  cursor position change. Used as a dependency in Toolbar's
+   *  activeStyles computation to force reliable recomputation. */
+  cursorVersion: number;
 
   // Sticky marks — toggled from toolbar when no selection is active.
   // When non-empty, newly typed text will inherit these marks and attrs.
@@ -19,6 +23,12 @@ interface EditorState {
    *  The next insertText will force a plain run (break out of the
    *  current run's inherited styling). Reset after one insertText. */
   stickyBreakOut: boolean;
+  /** When the user toggles a sticky mark OFF (e.g. clicks B again),
+   *  this stores the mark that was removed. The toolbar filters it
+   *  from activeStyles so the button shows inactive even when the
+   *  cursor is on text that has that mark. Cleared when the cursor
+   *  moves or after one insertText. */
+  stickyToggledOff: MarkType | null;
 
   // Actions
   setCursorPosition: (position: LogicalPosition) => void;
@@ -43,15 +53,20 @@ export const useEditorStore = create<EditorState>((set) => ({
   selection: null,
   focused: false,
   clickCount: 0,
+  cursorVersion: 0,
   stickyMarks: [],
   stickyAttrs: {},
   stickyBreakOut: false,
+  stickyToggledOff: null,
 
   setCursorPosition: (position) => {
-    // Clear sticky marks when the cursor moves to a different block
-    // via mouse click (selection would be cleared too).
-    // We use a get() to check if selection is being cleared simultaneously.
-    set({ cursor: { position } });
+    set((state) => ({
+      cursor: { position },
+      cursorVersion: state.cursorVersion + 1,
+      // Cursor moved: clear the toggled-off mark so the toolbar
+      // resumes reflecting the actual cursor position styles.
+      stickyToggledOff: null,
+    }));
   },
 
   setSelection: (selection) => {
@@ -105,9 +120,11 @@ export const useEditorStore = create<EditorState>((set) => ({
         : [...state.stickyMarks, mark];
       return {
         stickyMarks: newMarks,
-        // When removing the last mark, signal insertText to break out
-        // of the current run's inherited styling.
+        // When removing the last mark, track which mark was toggled off
+        // so the toolbar can filter it from activeStyles. Also signal
+        // insertText to break out of the current run's styling.
         stickyBreakOut: has && newMarks.length === 0,
+        stickyToggledOff: has && newMarks.length === 0 ? mark : null,
       };
     });
   },
@@ -121,10 +138,18 @@ export const useEditorStore = create<EditorState>((set) => ({
   },
 
   clearStickyMarks: () => {
-    set({ stickyMarks: [], stickyAttrs: {}, stickyBreakOut: true });
+    set((state) => ({
+      stickyMarks: [],
+      stickyAttrs: {},
+      stickyToggledOff: null,
+      // Only break out if there were actual sticky marks to clear.
+      // When clearStickyMarks is called after applying a style to a
+      // selection, sticky was already empty — no need to break out.
+      stickyBreakOut: state.stickyMarks.length > 0 || Object.keys(state.stickyAttrs).length > 0,
+    }));
   },
 
   consumeStickyBreakOut: () => {
-    set({ stickyBreakOut: false });
+    set({ stickyBreakOut: false, stickyToggledOff: null });
   },
 }));

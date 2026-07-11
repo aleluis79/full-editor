@@ -332,6 +332,13 @@ export function getNextBlock(
  * within a text block. Used to determine what styles are active at
  * the cursor position for toolbar reflection and sticky marks.
  */
+/**
+ * Get the marks and style attrs of the TextRun at the given offset
+ * within a text block. Uses strict less-than (<) so an offset exactly
+ * at the boundary between two runs returns the NEXT run — matching
+ * the convention in findRunAtOffset (operations.ts) where the cursor
+ * belongs to the following character.
+ */
 export function getRunStylesAtOffset(
   block: Paragraph | Heading,
   offset: number
@@ -340,7 +347,9 @@ export function getRunStylesAtOffset(
 
   let accumulated = 0;
   for (const run of block.children) {
-    if (offset <= accumulated + run.content.length) {
+    // Strict less-than: offset at a boundary falls through to the next
+    // run, so the cursor at the start of a styled run sees that style.
+    if (offset < accumulated + run.content.length) {
       return {
         marks: [...run.marks],
         attrs: run.attrs ? { ...run.attrs } : undefined,
@@ -349,10 +358,14 @@ export function getRunStylesAtOffset(
     accumulated += run.content.length;
   }
 
-  // Past all text — return last run's styles
-  const lastRun = block.children[block.children.length - 1];
-  return {
-    marks: [...lastRun.marks],
-    attrs: lastRun.attrs ? { ...lastRun.attrs } : undefined,
-  };
+  // Past all text or at the very end — return the last run's styles
+  if (block.children.length > 0) {
+    const lastRun = block.children[block.children.length - 1];
+    return {
+      marks: [...lastRun.marks],
+      attrs: lastRun.attrs ? { ...lastRun.attrs } : undefined,
+    };
+  }
+
+  return null;
 }

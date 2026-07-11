@@ -29,7 +29,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const cursor = useEditorStore((s) => s.cursor);
   const stickyMarks = useEditorStore((s) => s.stickyMarks);
   const stickyAttrs = useEditorStore((s) => s.stickyAttrs);
-  const stickyBreakOut = useEditorStore((s) => s.stickyBreakOut);
+  const stickyToggledOff = useEditorStore((s) => s.stickyToggledOff);
   const toggleStickyMark = useEditorStore((s) => s.toggleStickyMark);
   const setStickyStyle = useEditorStore((s) => s.setStickyStyle);
   const clearStickyMarks = useEditorStore((s) => s.clearStickyMarks);
@@ -64,7 +64,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
   // ── Active styles at cursor ────────────────────────────────
   // Derive the marks and attrs at the current cursor position so
   // the toolbar can reflect what style is under the cursor.
-  const activeStyles = useMemo(() => {
+  // Computed on every render (not memoized) to guarantee fresh results
+  // after document mutations that leave the cursor position unchanged
+  // (e.g. toggling bold on a selection, then clicking to move cursor).
+  const activeStyles = (() => {
     const { nodeId, offset } = cursor.position;
     if (!nodeId) return null;
 
@@ -72,28 +75,31 @@ export function Toolbar({ onBack }: ToolbarProps) {
     if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return null;
 
     return getRunStylesAtOffset(block as Paragraph | Heading, offset);
-  }, [doc, cursor.position.nodeId, cursor.position.offset]);
+  })();
 
-  // Effective marks: when the user has toggled sticky marks, show those
-  // (they determine what will be applied on next keystroke). Otherwise,
-  // fall back to the marks at the cursor position (toolbar reflection).
-  // When stickyBreakOut is true, the user just turned off all sticky
-  // marks — show nothing as active until the first character is typed.
+  // Effective marks: when sticky marks are set, show those (they determine
+  // what will be applied on next keystroke). Otherwise fall back to the
+  // cursor position's text run styles (toolbar reflection).
+  // When the user just toggled a sticky mark OFF (stickyToggledOff), filter
+  // that mark from the cursor styles so the button shows inactive
+  // immediately, even though the cursor is still on text with that style.
   const effectiveMarks = useMemo(() => {
-    if (stickyBreakOut) return new Set<MarkType>();
     if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
       return new Set(stickyMarks);
     }
-    return new Set(activeStyles?.marks ?? []);
-  }, [stickyMarks, stickyAttrs, stickyBreakOut, activeStyles]);
+    const marks = new Set(activeStyles?.marks ?? []);
+    if (stickyToggledOff) {
+      marks.delete(stickyToggledOff);
+    }
+    return marks;
+  }, [stickyMarks, stickyAttrs, stickyToggledOff, activeStyles]);
 
   const effectiveAttrs: Partial<StyleAttrs> = useMemo(() => {
-    if (stickyBreakOut) return {};
     if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
       return stickyAttrs;
     }
     return activeStyles?.attrs ?? {};
-  }, [stickyMarks, stickyAttrs, stickyBreakOut, activeStyles]);
+  }, [stickyMarks, stickyAttrs, activeStyles]);
 
   // ── Handlers ───────────────────────────────────────────────
 
