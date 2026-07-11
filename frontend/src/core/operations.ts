@@ -169,15 +169,25 @@ export function applyDeleteText(doc: DocumentRoot, op: DeleteTextOp): void {
   // Cannot delete at boundaries
   if (op.offset < 0 || op.offset >= blockText.length) return;
 
-  const { runIndex, localOffset } = findRunAtOffset(textBlock, op.offset);
+  // Delete `op.text.length` characters starting at `op.offset`.
+  // This handles batched insertText undo where multiple characters
+  // were merged into a single history entry.
+  // After each deletion the subsequent characters shift left, so we
+  // always delete at the SAME offset (op.offset) — NOT offset + i.
+  const charsToDelete = op.text.length || 1;
 
-  const run = textBlock.children[runIndex];
-  run.content =
-    run.content.slice(0, localOffset) + run.content.slice(localOffset + 1);
+  for (let i = 0; i < charsToDelete; i++) {
+    if (op.offset >= getBlockText(textBlock).length) break;
 
-  // If run is now empty, remove it (but keep at least one run)
-  if (run.content === '' && textBlock.children.length > 1) {
-    textBlock.children.splice(runIndex, 1);
+    const { runIndex, localOffset } = findRunAtOffset(textBlock, op.offset);
+    const run = textBlock.children[runIndex];
+    run.content =
+      run.content.slice(0, localOffset) + run.content.slice(localOffset + 1);
+
+    // If run is now empty, remove it (but keep at least one run)
+    if (run.content === '' && textBlock.children.length > 1) {
+      textBlock.children.splice(runIndex, 1);
+    }
   }
 }
 
