@@ -533,9 +533,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <option value="heading1">Heading 1</option>
           <option value="heading2">Heading 2</option>
           <option value="heading3">Heading 3</option>
-          <option value="blockquote">Blockquote</option>
-          <option value="list-ul">Bullet List</option>
-          <option value="list-ol">Numbered List</option>
         </select>
       </div>
 

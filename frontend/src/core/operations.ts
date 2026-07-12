@@ -784,6 +784,10 @@ export function applyConvertBlock(doc: DocumentRoot, op: ConvertBlockOp): void {
       children: [...source.children],
     };
     replaceBlockInDoc(doc, block.id, newBlock);
+  } else if (op.toType === 'heading' && block.type === 'heading') {
+    // Change heading level directly (e.g. Heading 1 → Heading 2)
+    const source = block as Heading;
+    source.level = (op.attrs?.level as 1 | 2 | 3 | 4 | 5 | 6) ?? 1;
   } else if (op.toType === 'blockquote' && block.type === 'paragraph') {
     const source = block as Paragraph;
     const newBlock: Blockquote = {
