@@ -447,15 +447,33 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
       const e = Math.max(selection.anchor.offset, selection.focus.offset);
       return [s, e];
     }
-    if (aIn) return [selection.anchor.offset, blockLen];
-    if (fIn) return [0, selection.focus.offset];
 
-    // Middle block in multi-block selection — entire block is selected
-    // Verify this block is actually between anchor and focus blocks
+    // Determine document order to handle backward selections (bottom→top).
+    // When anchor is AFTER focus in document order, the selection is backward
+    // and anchor/focus roles for partial blocks invert.
     const doc = useDocumentStore.getState().document;
     const allBlocks = getBlockNodes(doc);
     const anchorIdx = allBlocks.findIndex((b) => b.id === selection.anchor.nodeId);
     const focusIdx = allBlocks.findIndex((b) => b.id === selection.focus.nodeId);
+    const isForward = anchorIdx >= 0 && focusIdx >= 0 && anchorIdx <= focusIdx;
+
+    if (aIn) {
+      // Anchor is the FIRST block in forward selection → from offset to end.
+      // Anchor is the LAST block in backward selection → from start to offset.
+      return isForward
+        ? [selection.anchor.offset, blockLen]
+        : [0, selection.anchor.offset];
+    }
+    if (fIn) {
+      // Focus is the LAST block in forward selection → from start to offset.
+      // Focus is the FIRST block in backward selection → from offset to end.
+      return isForward
+        ? [0, selection.focus.offset]
+        : [selection.focus.offset, blockLen];
+    }
+
+    // Middle block in multi-block selection — entire block is selected
+    // Verify this block is actually between anchor and focus blocks
     const thisIdx = allBlocks.findIndex((b) => b.id === block.id);
     if (
       anchorIdx >= 0 && focusIdx >= 0 && thisIdx >= 0 &&

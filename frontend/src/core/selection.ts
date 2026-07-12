@@ -182,29 +182,40 @@ export function deleteSelection(
     const minIdx = Math.min(childStartIdx, childEndIdx);
     const maxIdx = Math.max(childStartIdx, childEndIdx);
 
-    // Truncate text in the first block from start.offset onward
+    // Keep text before start.offset in the first block
     const firstBlock = children[minIdx] as Paragraph | Heading;
     const firstText = getBlockText(firstBlock);
     const newFirstText = firstText.slice(0, start.offset);
 
-    if (newFirstText.length > 0) {
-      firstBlock.children[0].content = newFirstText;
+    // Keep text after end.offset in the last block (same as single-block does)
+    const lastBlock = children[maxIdx] as Paragraph | Heading;
+    const lastText = getBlockText(lastBlock);
+    const newLastText = lastText.slice(end.offset);
+
+    // Merge both remaining fragments into the first block
+    const merged = newFirstText + newLastText;
+    if (merged.length > 0) {
+      firstBlock.children[0].content = merged;
       firstBlock.children.splice(1);
     }
 
-    // Remove middle blocks and the last block entirely
-    const removeStart = newFirstText.length === 0 ? minIdx : minIdx + 1;
+    // Remove intermediate blocks and the last block (its trailing text
+    // was already merged into the first block above — the block itself
+    // is now redundant and must be removed).
+    const removeStart = merged.length === 0 ? minIdx : minIdx + 1;
     const removeEnd = maxIdx;
-    const removed = children.splice(removeStart, removeEnd - removeStart + 1);
+    if (removeStart <= removeEnd) {
+      children.splice(removeStart, removeEnd - removeStart + 1);
+    }
 
     // Determine cursor position
-    if (newFirstText.length > 0) {
-      // First block still has text — cursor goes there
-      return { newCursorPosition: { nodeId: firstBlock.id, offset: start.offset } };
+    if (merged.length > 0) {
+      // Cursor goes after the first-fragment text (before any merged trailing text)
+      return { newCursorPosition: { nodeId: firstBlock.id, offset: newFirstText.length } };
     }
-    // First block is now empty and was removed — cursor at previous block end or document start
-    if (children.length > 0 && removeStart > 0) {
-      const prevBlock = children[removeStart - 1];
+    // Everything was removed — cursor at previous block end or document start
+    if (children.length > 0 && minIdx > 0) {
+      const prevBlock = children[minIdx - 1];
       const prevText = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
         ? getBlockText(prevBlock as Paragraph | Heading)
         : 0;
