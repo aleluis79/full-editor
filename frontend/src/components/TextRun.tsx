@@ -73,7 +73,7 @@ export function TextRun({ run, selection, blockId, runGlobalOffset = 0 }: TextRu
 }
 
 /** Get the start and end offsets of a selection within a specific block */
-function getSelectionRangeInBlock(
+export function getSelectionRangeInBlock(
   selection: Selection,
   blockId: string
 ): { start: number; end: number } | null {
