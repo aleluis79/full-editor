@@ -8,12 +8,13 @@ import { HorizontalRuleBlock } from './HorizontalRuleBlock';
 interface PageProps {
   blocks: BlockNode[];
   activeBlockId: string | null;
+  onBlockMouseDown: (blockId: string, e: React.MouseEvent) => void;
   onBlockClick: (blockId: string) => void;
   onDoubleClick: (blockId: string) => void;
   onTripleClick: (blockId: string) => void;
 }
 
-export function Page({ blocks, activeBlockId, onBlockClick, onDoubleClick, onTripleClick }: PageProps) {
+export function Page({ blocks, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick }: PageProps) {
   const getBlockLayout = useLayoutStore((s) => s.getBlockLayout);
 
   return (
@@ -42,6 +43,7 @@ export function Page({ blocks, activeBlockId, onBlockClick, onDoubleClick, onTri
                 key={block.id}
                 block={block as List}
                 activeBlockId={activeBlockId}
+                onBlockMouseDown={onBlockMouseDown}
                 onBlockClick={onBlockClick}
                 onDoubleClick={onDoubleClick}
                 onTripleClick={onTripleClick}

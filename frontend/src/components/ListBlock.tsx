@@ -2,16 +2,18 @@ import type { List as ListType, ListItem as ListItemType, Paragraph } from '../c
 import { Paragraph as ParagraphComponent } from './Paragraph';
 
 type BlockClickHandler = (blockId: string, clientX: number, clientY: number) => void;
+type BlockMouseDownHandler = (blockId: string, e: React.MouseEvent) => void;
 
 interface ListProps {
   block: ListType;
   activeBlockId: string | null;
+  onBlockMouseDown: BlockMouseDownHandler;
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
 }
 
-export function ListBlock({ block, activeBlockId, onBlockClick, onDoubleClick, onTripleClick }: ListProps) {
+export function ListBlock({ block, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick }: ListProps) {
   const Tag = block.ordered ? 'ol' : 'ul';
 
   return (
@@ -21,6 +23,7 @@ export function ListBlock({ block, activeBlockId, onBlockClick, onDoubleClick, o
           key={item.id}
           item={item}
           activeBlockId={activeBlockId}
+          onBlockMouseDown={onBlockMouseDown}
           onBlockClick={onBlockClick}
           onDoubleClick={onDoubleClick}
           onTripleClick={onTripleClick}
@@ -33,12 +36,13 @@ export function ListBlock({ block, activeBlockId, onBlockClick, onDoubleClick, o
 interface ListItemBlockProps {
   item: ListItemType;
   activeBlockId: string | null;
+  onBlockMouseDown: BlockMouseDownHandler;
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
 }
 
-function ListItemBlock({ item, activeBlockId, onBlockClick, onDoubleClick, onTripleClick }: ListItemBlockProps) {
+function ListItemBlock({ item, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick }: ListItemBlockProps) {
   return (
     <li className="list-item" data-block-id={item.id}>
       {item.children.map((child) => {
@@ -48,6 +52,7 @@ function ListItemBlock({ item, activeBlockId, onBlockClick, onDoubleClick, onTri
               key={child.id}
               block={child as Paragraph}
               isActive={child.id === activeBlockId}
+              onMouseDown={onBlockMouseDown}
               onBlockClick={onBlockClick}
               onDoubleClick={onDoubleClick}
               onTripleClick={onTripleClick}
@@ -60,6 +65,7 @@ function ListItemBlock({ item, activeBlockId, onBlockClick, onDoubleClick, onTri
               key={child.id}
               block={child as ListType}
               activeBlockId={activeBlockId}
+              onBlockMouseDown={onBlockMouseDown}
               onBlockClick={onBlockClick}
               onDoubleClick={onDoubleClick}
               onTripleClick={onTripleClick}

@@ -1,9 +1,12 @@
 import type { Paragraph as ParagraphType, Heading as HeadingType } from '../core/types';
 import { TextRun } from './TextRun';
 import { useEditorStore } from '../stores/editor-store';
+import { useDocumentStore } from '../stores/document-store';
 import { useRef, useLayoutEffect, useState } from 'react';
+import { getBlockNodes } from '../core/document';
 
 type BlockClickHandler = (blockId: string, clientX: number, clientY: number) => void;
+type BlockMouseDownHandler = (blockId: string, e: React.MouseEvent) => void;
 
 interface ParagraphProps {
   block: ParagraphType | HeadingType;
@@ -11,9 +14,10 @@ interface ParagraphProps {
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
+  onMouseDown?: BlockMouseDownHandler;
 }
 
-export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTripleClick }: ParagraphProps) {
+export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTripleClick, onMouseDown }: ParagraphProps) {
   const selection = useEditorStore((s) => s.selection);
   const cursor = useEditorStore((s) => s.cursor);
   const focused = useEditorStore((s) => s.focused);
@@ -22,10 +26,62 @@ export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTrip
 
   const className = `paragraph ${isActive ? 'active' : ''} ${block.type === 'heading' ? `heading-${(block as HeadingType).level}` : ''}`;
 
-  // Check if this block has selected text
-  const hasSelection = selection && (
-    selection.anchor.nodeId === block.id || selection.focus.nodeId === block.id
-  );
+  // Compute effective selection range for THIS block only.
+  const blockLen = block.children.reduce((s, r) => s + r.content.length, 0);
+  let effectiveSelection: typeof selection = null;
+
+  if (selection) {
+    const aIn = selection.anchor.nodeId === block.id;
+    const fIn = selection.focus.nodeId === block.id;
+
+    if (aIn && fIn) {
+      // Both ends in this block — pass as-is (TextRun handles ordering)
+      effectiveSelection = selection;
+    } else if (aIn || fIn) {
+      // One end in this block. Determine direction from document order
+      // so backward selections (bottom→top) render the correct half.
+      const doc = useDocumentStore.getState().document;
+      const blocks = getBlockNodes(doc);
+      const anchorIdx = blocks.findIndex((b) => b.id === selection.anchor.nodeId);
+      const focusIdx = blocks.findIndex((b) => b.id === selection.focus.nodeId);
+      const isForward = anchorIdx >= 0 && focusIdx >= 0 && anchorIdx <= focusIdx;
+
+      if (aIn) {
+        // Anchor in this block
+        effectiveSelection = isForward
+          ? { anchor: selection.anchor, focus: { nodeId: block.id, offset: blockLen } }
+          : { anchor: { nodeId: block.id, offset: 0 }, focus: selection.anchor };
+      } else {
+        // Focus in this block
+        effectiveSelection = isForward
+          ? { anchor: { nodeId: block.id, offset: 0 }, focus: selection.focus }
+          : { anchor: selection.focus, focus: { nodeId: block.id, offset: blockLen } };
+      }
+    } else {
+      // Neither end in this block. Check if it's a middle block (between
+      // anchor and focus in document order) or outside the selection.
+      const doc = useDocumentStore.getState().document;
+      const blocks = getBlockNodes(doc);
+      const anchorIdx = blocks.findIndex((b) => b.id === selection.anchor.nodeId);
+      const focusIdx = blocks.findIndex((b) => b.id === selection.focus.nodeId);
+      const thisIdx = blocks.findIndex((b) => b.id === block.id);
+
+      if (
+        anchorIdx >= 0 && focusIdx >= 0 && thisIdx >= 0 &&
+        thisIdx > Math.min(anchorIdx, focusIdx) &&
+        thisIdx < Math.max(anchorIdx, focusIdx)
+      ) {
+        // Middle block in multi-block selection — entire block selected
+        effectiveSelection = {
+          anchor: { nodeId: block.id, offset: 0 },
+          focus: { nodeId: block.id, offset: blockLen },
+        };
+      }
+      // else: block is outside the selection — leave as null
+    }
+  }
+
+  const hasSelection = effectiveSelection !== null;
 
   // Compute cursor screen position using the caret API when this block is active
   const showCursor = focused && !hasSelection && cursor.position.nodeId === block.id;
@@ -73,14 +129,24 @@ export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTrip
 
   const content = (
     <>
-      {block.children.map((run) => (
-        <TextRun
-          key={run.id}
-          run={run}
-          selection={hasSelection ? selection : null}
-          blockId={block.id}
-        />
-      ))}
+      {(() => {
+        let globalOffset = 0;
+        return block.children.map((run) => {
+          const runLen = run.content.length;
+          const runStart = globalOffset;
+          const runEnd = runStart + runLen;
+          globalOffset += runLen;
+          return (
+            <TextRun
+              key={run.id}
+              run={run}
+              selection={effectiveSelection}
+              blockId={block.id}
+              runGlobalOffset={runStart}
+            />
+          );
+        });
+      })()}
       {block.children.length === 0 && <br />}
       {showCursor && cursorPos && (
         <span
@@ -104,6 +170,7 @@ export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTrip
         ref={paraRef}
         className={className}
         data-block-id={block.id}
+        onMouseDown={(e) => onMouseDown?.(block.id, e)}
         onClick={(e) => onBlockClick(block.id, e.clientX, e.clientY)}
         onDoubleClick={(e) => onDoubleClick(block.id, e.clientX, e.clientY)}
         onMouseUp={(e) => {
@@ -122,6 +189,7 @@ export function Paragraph({ block, isActive, onBlockClick, onDoubleClick, onTrip
       ref={paraRef}
       className={className}
       data-block-id={block.id}
+      onMouseDown={(e) => onMouseDown?.(block.id, e)}
       onClick={(e) => onBlockClick(block.id, e.clientX, e.clientY)}
       onDoubleClick={(e) => onDoubleClick(block.id, e.clientX, e.clientY)}
       onMouseUp={(e) => {

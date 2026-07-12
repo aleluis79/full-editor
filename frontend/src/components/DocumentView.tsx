@@ -276,6 +276,7 @@ function renderBlock(
         key={block.id}
         block={block as List}
         activeBlockId={activeBlockId}
+        onBlockMouseDown={onBlockMouseDown}
         onBlockClick={onBlockClick}
         onDoubleClick={onDoubleClick}
         onTripleClick={onTripleClick}
