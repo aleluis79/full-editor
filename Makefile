@@ -3,6 +3,7 @@
 # ──────────────────────────────────────────────────────────────
 
 .PHONY: help setup frontend-install backend-install frontend-dev backend-dev dev
+.PHONY: db-start db-stop
 .PHONY: frontend-build backend-migrate frontend-test backend-test test
 .PHONY: frontend-lint backend-lint lint frontend-clean backend-clean clean
 
@@ -41,6 +42,29 @@ frontend-build: ## Build frontend for production
 	cd frontend && npm run build
 
 # ── Database ─────────────────────────────────────────────────
+
+db-start: ## Start PostgreSQL container if not already running
+	@if [ "$$(docker ps -q -f name=full-editor-db)" = "" ]; then \
+		echo "Starting PostgreSQL container..."; \
+		docker run -d \
+			--name full-editor-db \
+			-e POSTGRES_USER=user \
+			-e POSTGRES_PASSWORD=pass \
+			-e POSTGRES_DB=full_editor \
+			-p 5432:5432 \
+			postgres:16-alpine; \
+		echo "Waiting for PostgreSQL to be ready..."; \
+		until docker exec full-editor-db pg_isready -U user -d full_editor > /dev/null 2>&1; do \
+			sleep 1; \
+		done; \
+		echo "PostgreSQL is ready!"; \
+	else \
+		echo "PostgreSQL container is already running."; \
+	fi
+
+db-stop: ## Stop and remove the PostgreSQL container
+	docker stop full-editor-db 2>/dev/null || true
+	docker rm full-editor-db 2>/dev/null || true
 
 backend-migrate: ## Run Alembic migrations
 	. backend/.venv/bin/activate && cd backend && alembic upgrade head
