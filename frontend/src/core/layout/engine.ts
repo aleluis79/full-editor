@@ -30,7 +30,7 @@ export const DEFAULT_CONSTRAINTS: LayoutConstraints = {
   fontSize: 16,
   lineHeight: 1.5,
   marginTop: 0,
-  marginBottom: 8,
+  marginBottom: 0,
   marginLeft: 0,
   marginRight: 0,
   paddingTop: 0,

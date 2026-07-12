@@ -213,6 +213,6 @@ export class PaginationEngine {
    * Get block margin (top + bottom) — matches layout engine's marginBottom.
    */
   private getBlockMargin(_block: BlockLayout): number {
-    return 8; // Margin between blocks, matches CSS margin-bottom: 0.5em
+    return 0;
   }
 }

@@ -118,7 +118,7 @@ body {
   cursor: text;
   min-height: 1.5em;
   position: relative;
-  max-width: calc(var(--page-width) - var(--page-margin) * 2 - 100px);
+  max-width: calc(var(--page-width) - var(--page-margin) * 2);
   overflow-wrap: break-word;
   word-wrap: break-word;
   user-select: text;
@@ -167,7 +167,7 @@ body {
    ============================================================ */
 
 .list-block {
-  margin: 0.5em 0;
+  margin: 0;
   padding-left: 1.5em;
   scroll-margin-top: 56px;
 }
@@ -179,7 +179,7 @@ body {
 }
 
 .list-item {
-  margin: 0.25em 0;
+  margin: 0;
 }
 
 .list-item .paragraph {

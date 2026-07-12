@@ -62,26 +62,26 @@ class PDFExporter:
             name='Heading1Custom',
             parent=self.styles['Heading1'],
             fontSize=24,
-            spaceAfter=12,
+            spaceAfter=0,
         ))
         self.styles.add(ParagraphStyle(
             name='Heading2Custom',
             parent=self.styles['Heading2'],
             fontSize=18,
-            spaceAfter=10,
+            spaceAfter=0,
         ))
         self.styles.add(ParagraphStyle(
             name='Heading3Custom',
             parent=self.styles['Heading3'],
-            fontSize=14,
-            spaceAfter=8,
+            fontSize=15,
+            spaceAfter=0,
         ))
         self.styles.add(ParagraphStyle(
             name='BodyTextCustom',
             parent=self.styles['Normal'],
             fontSize=12,
-            leading=16,
-            spaceAfter=8,
+            leading=18,
+            spaceAfter=0,
         ))
         self.styles.add(ParagraphStyle(
             name='BlockquoteCustom',
@@ -311,12 +311,25 @@ class PDFExporter:
         return [table]
     
     def _extract_text(self, node: Dict[str, Any]) -> str:
-        """Extract text content from a node."""
+        """Extract text content from a node, recursing into block children."""
         children = node.get("children", [])
         text_parts = []
         
         for child in children:
-            if child.get("type") == "text":
+            child_type = child.get("type")
+            
+            # Skip non-content types
+            if child_type == "listItem":
+                # List items contain block children (paragraphs) — recurse
+                text_parts.append(self._extract_text(child))
+                continue
+            
+            if child_type in ("paragraph", "heading"):
+                # Block types — recurse into their text runs
+                text_parts.append(self._extract_text(child))
+                continue
+            
+            if child_type == "text":
                 content = child.get("content", "")
                 marks = child.get("marks", [])
                 attrs = child.get("attrs", {}) or {}
