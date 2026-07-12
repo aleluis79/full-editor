@@ -40,10 +40,12 @@ export function moveCursorRight(
     return { position: { nodeId, offset: offset + 1 } };
   }
 
-  // Move to next block
-  const nextBlock = getNextBlock(doc, nodeId);
-  if (nextBlock && (nextBlock.type === 'paragraph' || nextBlock.type === 'heading')) {
-    return { position: { nodeId: nextBlock.id, offset: 0 } };
+  // Move to next paragraph/heading block — skip intermediates (list items, lists, etc.)
+  const idx = blocks.findIndex((b) => b.id === nodeId);
+  for (let i = idx + 1; i < blocks.length; i++) {
+    if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
+      return { position: { nodeId: blocks[i].id, offset: 0 } };
+    }
   }
 
   return cursor; // Already at end of document
@@ -60,11 +62,14 @@ export function moveCursorLeft(
     return { position: { nodeId, offset: offset - 1 } };
   }
 
-  // Move to end of previous block
-  const prevBlock = getPreviousBlock(doc, nodeId);
-  if (prevBlock && (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')) {
-    const text = getBlockText(prevBlock as Paragraph | Heading);
-    return { position: { nodeId: prevBlock.id, offset: text.length } };
+  // Move to end of previous paragraph/heading block — skip intermediates
+  const blocks = getBlockNodes(doc);
+  const idx = blocks.findIndex((b) => b.id === nodeId);
+  for (let i = idx - 1; i >= 0; i--) {
+    if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
+      const text = getBlockText(blocks[i] as Paragraph | Heading);
+      return { position: { nodeId: blocks[i].id, offset: text.length } };
+    }
   }
 
   return cursor; // Already at beginning of document

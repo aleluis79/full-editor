@@ -259,6 +259,40 @@ function findNodeInChildren(
   return null;
 }
 
+/**
+ * Find the parent list and item index for a block nested inside a list.
+ * Returns null if the block is not inside any list.
+ */
+export function findListContext(
+  doc: DocumentRoot,
+  blockId: NodeId
+): { list: List; listItem: ListItem; itemIndex: number } | null {
+  for (const child of doc.children) {
+    if (child.type === 'list') {
+      const list = child as List;
+      for (let i = 0; i < list.children.length; i++) {
+        const item = list.children[i];
+        if (item.id === blockId || item.children.some((c) => c.id === blockId)) {
+          return { list, listItem: item, itemIndex: i };
+        }
+        // Check nested lists
+        for (const nestedChild of item.children) {
+          if (nestedChild.type === 'list') {
+            const nestedList = nestedChild as List;
+            for (let j = 0; j < nestedList.children.length; j++) {
+              const nestedItem = nestedList.children[j];
+              if (nestedItem.children.some((c) => c.id === blockId)) {
+                return { list: nestedList, listItem: nestedItem, itemIndex: j };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /** Get the parent of a node */
 export function getParent(
   doc: DocumentRoot,

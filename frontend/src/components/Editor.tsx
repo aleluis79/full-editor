@@ -3,7 +3,7 @@ import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { useLayoutStore } from '../stores/layout-store';
 import { usePageStore } from '../stores/page-store';
-import { getBlockNodes, getPreviousBlock, getBlockText, findNode } from '../core/document';
+import { getBlockNodes, getPreviousBlock, getNextBlock, getBlockText, findNode, findListContext } from '../core/document';
 import {
   moveCursorRight,
   moveCursorLeft,
@@ -32,6 +32,11 @@ export function Editor({ onBack }: EditorProps) {
   const undo = useDocumentStore((s) => s.undo);
   const redo = useDocumentStore((s) => s.redo);
   const mergeBlocks = useDocumentStore((s) => s.mergeBlocks);
+  const removeListItem = useDocumentStore((s) => s.removeListItem);
+  const exitList = useDocumentStore((s) => s.exitList);
+  const convertBlock = useDocumentStore((s) => s.convertBlock);
+  const appendBlockToList = useDocumentStore((s) => s.appendBlockToList);
+  const prependListToBlock = useDocumentStore((s) => s.prependListToBlock);
 
   const cursor = useEditorStore((s) => s.cursor);
   const focused = useEditorStore((s) => s.focused);
@@ -463,22 +468,65 @@ export function Editor({ onBack }: EditorProps) {
             setCursorPosition(result.newCursorPosition);
             clearSelection();
           } else if (offset === 0) {
-            // At start of block → merge with previous block
-            const prevBlock = getPreviousBlock(doc, nodeId);
-            if (prevBlock && (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')) {
-              const result = mergeBlocks(prevBlock.id);
-              if (result) {
-                setCursorPosition(result.newCursorPosition);
-                clearSelection();
+            // Check if we're at the start of a paragraph inside a list
+            const listCtx = findListContext(doc, nodeId);
+            if (listCtx) {
+              const block = findNode(doc, nodeId);
+              const text = block && (block.type === 'paragraph' || block.type === 'heading')
+                ? getBlockText(block as any) : '';
+              const isEmpty = text === '' || text === '\u200B';
+
+              if (isEmpty) {
+                // Empty list item → remove it (or exit list if last item)
+                if (listCtx.list.children.length <= 1) {
+                  // Only item in list → convert list to paragraph
+                  convertBlock(listCtx.list.id, 'paragraph');
+                } else {
+                  removeListItem(listCtx.list.id, listCtx.itemIndex);
+                }
+              } else if (listCtx.itemIndex > 0) {
+                // Non-empty, not first item → merge with previous item
+                const prevItem = listCtx.list.children[listCtx.itemIndex - 1];
+                const prevPara = prevItem.children.find(
+                  (c) => c.type === 'paragraph'
+                ) as Paragraph | undefined;
+                if (prevPara) {
+                  // Move content to previous item, remove this item
+                  const content = getBlockText(block as any);
+                  const prevText = getBlockText(prevPara);
+                  prevPara.children[0].content = prevText + content;
+                  prevPara.children.splice(1);
+                  removeListItem(listCtx.list.id, listCtx.itemIndex);
+                  setCursorPosition({
+                    nodeId: prevPara.id,
+                    offset: prevText.length,
+                  });
+                  clearSelection();
+                }
+              } else {
+                // First item with content → promote to paragraph (keeps content)
+                convertBlock(listCtx.list.id, 'paragraph');
+              }
+            } else {
+              // Check if previous block is the last paragraph inside a list
+              const prevBlock = getPreviousBlock(doc, nodeId);
+              if (prevBlock) {
+                const prevListCtx = findListContext(doc, prevBlock.id);
+                if (prevListCtx) {
+                  // Previous block is inside a list — append this block to the list
+                  appendBlockToList(nodeId, prevListCtx.list.id);
+                } else if (prevBlock.type === 'paragraph' || prevBlock.type === 'heading') {
+                  const result = mergeBlocks(prevBlock.id);
+                  if (result) {
+                    setCursorPosition(result.newCursorPosition);
+                    clearSelection();
+                  }
+                }
               }
             }
           } else {
             deleteText(nodeId, offset, 'backward');
-            // After backward delete, cursor must move back by 1: the
-            // character at offset-1 was removed, so the cursor goes
-            // to the deleted character's position. clampCursor does
-            // NOT shift the offset — it only caps it to text length,
-            // which keeps the cursor one position too far right.
+            // After backward delete, cursor must move back by 1
             const newOffset = offset - 1;
             const newDoc = useDocumentStore.getState().document;
             const clamped = clampCursor(newDoc, {
@@ -505,6 +553,21 @@ export function Editor({ onBack }: EditorProps) {
               if (result) {
                 setCursorPosition(result.newCursorPosition);
                 clearSelection();
+              } else {
+                // mergeBlocks may fail if the next block is a list (or inside one).
+                // Check and prepend the list's first item into this block.
+                const nextBlock = getNextBlock(doc, nodeId);
+                if (nextBlock) {
+                  if (nextBlock.type === 'list') {
+                    // Next block IS a list → prepend its first item
+                    prependListToBlock(nodeId, nextBlock.id);
+                  } else {
+                    const nextListCtx = findListContext(doc, nextBlock.id);
+                    if (nextListCtx) {
+                      prependListToBlock(nodeId, nextListCtx.list.id);
+                    }
+                  }
+                }
               }
             } else {
               deleteText(nodeId, offset, 'forward');
@@ -520,6 +583,27 @@ export function Editor({ onBack }: EditorProps) {
             setCursorPosition(result.newCursorPosition);
             clearSelection();
           } else {
+            // Use fresh document from store to avoid stale closure
+            const freshDoc = useDocumentStore.getState().document;
+            const block = findNode(freshDoc, nodeId);
+            const text = block && (block.type === 'paragraph' || block.type === 'heading')
+              ? getBlockText(block as any) : '';
+
+            // Check if cursor is on a paragraph inside a list
+            const listCtx = findListContext(freshDoc, nodeId);
+            const isEmpty = text === '' || text === '\u200B';
+
+            if (listCtx && isEmpty) {
+              // Empty item → exit the list (pass context directly so
+              // exitList doesn't need to re-discover it from the clone)
+              exitList(nodeId, listCtx.list.id, listCtx.itemIndex);
+              // Ensure textarea stays focused so InlineCursor is visible
+              // and keyboard input works after DOM mutation.
+              if (document.activeElement !== textareaRef.current) {
+                textareaRef.current?.focus({ preventScroll: true });
+              }
+              break;
+            }
             const newBlockId = splitBlock(nodeId, offset);
             if (newBlockId) {
               setCursorPosition({ nodeId: newBlockId, offset: 0 });

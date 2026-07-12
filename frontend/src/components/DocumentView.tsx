@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import type { BlockNode, Paragraph, Heading, List, Blockquote, HorizontalRule, Image, Table } from '../core/types';
+import type { BlockNode, Paragraph, Heading, List, Blockquote, HorizontalRule, Image, Table, ListItem } from '../core/types';
 import type { BlockLayout } from '../core/layout/types';
 import type { Page as PageType, HeaderFooterConfig } from '../core/pagination/types';
 import { useDocumentStore } from '../stores/document-store';
@@ -169,6 +169,22 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
           const block = blocks.find((b) => b.id === blockLayout.blockId);
           if (!block) return null;
 
+          // Skip blocks that are inside list/blockquote containers — those
+          // containers render their own children (ListBlock, BlockquoteBlock)
+          // via DOM flow. Including them here would duplicate the content.
+          if (block.type !== 'list' && block.type !== 'blockquote') {
+            // Check if this block is a child of a container
+            const isInsideList = blocks.some((b) =>
+              (b.type === 'list' || b.type === 'blockquote') &&
+              'children' in b &&
+              (b as any).children?.some((item: any) =>
+                item.id === block.id ||
+                (item.children && (item as any).children?.some((c: any) => c.id === block.id))
+              )
+            );
+            if (isInsideList) return null;
+          }
+
           return (
             <div
               key={block.id}
@@ -337,6 +353,13 @@ function renderBlockContent(
         onTripleClick={onTripleClick}
       />
     );
+  }
+
+  // Container blocks (list, listItem, blockquote) are rendered by their own
+  // component (ListBlock, BlockquoteBlock) which already renders children.
+  // Skip individual list-related blocks to avoid double-rendering.
+  if (block.type === 'listItem') {
+    return null;
   }
 
   // For other block types, render with layout positions

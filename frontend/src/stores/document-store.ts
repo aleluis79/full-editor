@@ -1,13 +1,18 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading, BlockNode } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading, List, ListItem, BlockNode } from '../core/types';
 import {
   createDocument,
   createParagraph,
+  createListItem,
+  createList,
+  createTextRun,
+  createId,
   createTableRow,
   cloneDocument,
   getBlockNodes,
   getBlockText,
   findNode,
+  findListContext,
 } from '../core/document';
 import {
   applyInsertText,
@@ -94,6 +99,11 @@ interface DocumentState {
   setBlockAttrsRange: (startBlockId: NodeId, endBlockId: NodeId, attrs: BlockAttrs) => void;
   insertBlock: (afterBlockId: NodeId, blockType: 'paragraph' | 'heading' | 'list' | 'blockquote' | 'horizontalRule', attrs?: Record<string, unknown>) => NodeId;
   convertBlock: (blockId: NodeId, toType: BlockType, attrs?: Record<string, unknown>) => void;
+  convertRangeToList: (startBlockId: string, endBlockId: string, ordered: boolean) => void;
+  removeListItem: (listId: string, itemIndex: number) => void;
+  exitList: (nodeId: string, listId?: string, itemIndex?: number) => void;
+  appendBlockToList: (blockId: string, listId: string) => void;
+  prependListToBlock: (blockId: string, listId: string) => void;
   insertImage: (afterBlockId: NodeId, src: string, alt?: string, width?: number, height?: number, inline?: boolean) => NodeId;
   resizeImage: (blockId: NodeId, width: number, height: number) => void;
   insertTable: (afterBlockId: NodeId, rows: number, cols: number) => NodeId;
@@ -1006,10 +1016,12 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     const block = findNode(docClone, blockId);
     if (!block) return;
 
+    const fromType = block.type;
+
     const op: ConvertBlockOp = {
       type: 'convertBlock',
       blockId,
-      fromType: block.type,
+      fromType,
       toType,
       attrs,
     };
@@ -1033,6 +1045,395 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       historyIndex: newHistory.length - 1,
       lastOperationTime: now,
     });
+
+    // ── Fix cursor after structural block conversion ────────────
+    const ed = useEditorStore.getState();
+    ed.clearSelection();
+
+    if (toType === 'list') {
+      // Paragraph → list: point cursor to the first paragraph inside the new list
+      const newList = docClone.children.find((c) => c.id === blockId);
+      if (newList && newList.type === 'list') {
+        const firstItem = (newList as List).children?.[0];
+        const firstPara = firstItem?.children?.find((c) => c.type === 'paragraph') as Paragraph | undefined;
+        if (firstPara) {
+          ed.setCursorPosition({ nodeId: firstPara.id, offset: 0 });
+        }
+      }
+    } else if (fromType === 'heading' || fromType === 'list' || fromType === 'blockquote') {
+      // Converting to paragraph: the new paragraph keeps the same blockId
+      ed.setCursorPosition({ nodeId: blockId, offset: 0 });
+    }
+  },
+
+  convertRangeToList: (startBlockId: string, endBlockId: string, ordered: boolean) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const allBlocks = getBlockNodes(docClone);
+    const startIdx = allBlocks.findIndex((b) => b.id === startBlockId);
+    const endIdx = allBlocks.findIndex((b) => b.id === endBlockId);
+    if (startIdx < 0 || endIdx < 0) return;
+
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+
+    // Collect top-level paragraph/heading blocks in the range
+    const topLevelIds: string[] = [];
+    const items: ListItem[] = [];
+
+    const isInList = (blockId: string): boolean => {
+      for (const top of docClone.children) {
+        if (top.type === 'list') {
+          if ((top as List).children.some((item) =>
+            item.id === blockId || item.children.some((c) => c.id === blockId)
+          )) return true;
+        }
+      }
+      return false;
+    };
+
+    for (let i = minIdx; i <= maxIdx; i++) {
+      const b = allBlocks[i];
+      // Only convert top-level paragraphs/headings not already inside a list
+      if ((b.type === 'paragraph' || b.type === 'heading') &&
+          !isInList(b.id) &&
+          docClone.children.some((c) => c.id === b.id)) {
+        const para = b as Paragraph | Heading;
+        const newPara: Paragraph = {
+          id: createId(),
+          type: 'paragraph',
+          children: [...para.children],
+          attrs: 'attrs' in para ? { ...(para.attrs ?? {}) } : undefined,
+        };
+        items.push(createListItem([newPara]));
+        topLevelIds.push(b.id);
+      }
+    }
+
+    if (items.length === 0) return;
+
+    // Snapshot: save original blocks for undo
+    const firstBlockIdx = docClone.children.findIndex((c) => c.id === topLevelIds[0]);
+    const lastBlockIdx = docClone.children.findIndex((c) => c.id === topLevelIds[topLevelIds.length - 1]);
+    const snapshotBlocks = firstBlockIdx >= 0 && lastBlockIdx >= firstBlockIdx
+      ? docClone.children.slice(firstBlockIdx, lastBlockIdx + 1).map((b) => JSON.parse(JSON.stringify(b)))
+      : [];
+
+    // Replace first block with the new list
+    const newList = createList(ordered, items);
+    docClone.children[firstBlockIdx] = newList;
+
+    // Remove remaining original blocks (work backwards to preserve indices)
+    for (let i = topLevelIds.length - 1; i >= 1; i--) {
+      const idx = docClone.children.findIndex((c) => c.id === topLevelIds[i]);
+      if (idx >= 0) {
+        docClone.children.splice(idx, 1);
+      }
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [],
+      inverse: [],
+      description: 'Convert to list',
+      convertRangeSnapshot: snapshotBlocks.length > 0 ? {
+        blocks: snapshotBlocks,
+        atIndex: firstBlockIdx,
+      } : undefined,
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    if (newHistory.length > MAX_HISTORY_ENTRIES) {
+      newHistory.splice(0, newHistory.length - MAX_HISTORY_ENTRIES);
+    }
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+
+    // Set cursor to first list item's paragraph
+    const firstPara = items[0]?.children?.[0];
+    if (firstPara) {
+      const ed = useEditorStore.getState();
+      ed.setCursorPosition({ nodeId: firstPara.id, offset: 0 });
+      ed.clearSelection();
+    }
+  },
+
+  removeListItem: (listId, itemIndex) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const list = docClone.children.find((c) => c.id === listId) as List | undefined;
+    if (!list || itemIndex < 0 || itemIndex >= list.children.length) return;
+
+    // Snapshot the original blocks around this list for undo
+    const listIdx = docClone.children.findIndex((c) => c.id === listId);
+
+    // Remove the item
+    list.children.splice(itemIndex, 1);
+
+    let cursorPos = { nodeId: '', offset: 0 };
+
+    if (list.children.length === 0) {
+      // List is now empty — replace it with an empty paragraph
+      if (listIdx >= 0) {
+        const newPara = createParagraph('');
+        docClone.children[listIdx] = newPara;
+        cursorPos = { nodeId: newPara.id, offset: 0 };
+      }
+    } else {
+      // Move cursor to the previous item's end (if removing a non-first item)
+      // or to the next item's start (if removing the first item).
+      if (itemIndex > 0) {
+        const prevItem = list.children[itemIndex - 1];
+        const prevPara = prevItem.children.find((c) => c.type === 'paragraph') as Paragraph | undefined;
+        if (prevPara) {
+          const text = getBlockText(prevPara);
+          cursorPos = { nodeId: prevPara.id, offset: text.length };
+        }
+      } else {
+        const firstItem = list.children[0];
+        const firstPara = firstItem.children.find((c) => c.type === 'paragraph') as Paragraph | undefined;
+        if (firstPara) {
+          cursorPos = { nodeId: firstPara.id, offset: 0 };
+        }
+      }
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [],
+      inverse: [],
+      description: 'Remove list item',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+
+    if (cursorPos.nodeId) {
+      useEditorStore.getState().setCursorPosition(cursorPos);
+      useEditorStore.getState().clearSelection();
+    }
+  },
+
+  exitList: (nodeId, _listId, _itemIndex) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    // Find the list and item — use provided indices or scan
+    let list: List | null = null;
+    let listIdx = -1;
+    let itemIndex = _itemIndex >= 0 ? _itemIndex : -1;
+
+    if (_listId) {
+      list = docClone.children.find((c) => c.id === _listId) as List | null;
+      listIdx = list ? docClone.children.indexOf(list) : -1;
+    }
+
+    if (!list) {
+      // Scan for the list that contains this nodeId
+      for (let ci = 0; ci < docClone.children.length; ci++) {
+        const child = docClone.children[ci];
+        if (child.type !== 'list') continue;
+        const candidate = child as List;
+        for (let ii = 0; ii < candidate.children.length; ii++) {
+          const item = candidate.children[ii];
+          if (item.id === nodeId || item.children.some((c) => c.id === nodeId)) {
+            list = candidate;
+            listIdx = ci;
+            itemIndex = ii;
+            break;
+          }
+        }
+        if (list) break;
+      }
+    }
+
+    if (!list || listIdx < 0 || itemIndex < 0) {
+      // Last resort: create a paragraph right here in case we missed the context
+      // This at least lets the user continue typing.
+      const fallbackPara = createParagraph('');
+      const cursorIdx = docClone.children.findIndex((c) => c.id === nodeId);
+      if (cursorIdx >= 0) {
+        docClone.children.splice(cursorIdx + 1, 0, fallbackPara);
+      } else {
+        docClone.children.push(fallbackPara);
+      }
+      useEditorStore.getState().setCursorPosition({ nodeId: fallbackPara.id, offset: 0 });
+      useEditorStore.getState().clearSelection();
+      return;
+    }
+
+    // Create a new paragraph after the list
+    const newPara = createParagraph('');
+    docClone.children.splice(listIdx + 1, 0, newPara);
+
+    // Remove the current item from the list
+    list.children.splice(itemIndex, 1);
+
+    // If the list is now empty, remove it
+    if (list.children.length === 0) {
+      const idx = docClone.children.findIndex((c) => c.id === list.id);
+      if (idx >= 0) {
+        docClone.children.splice(idx, 1);
+      }
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [],
+      inverse: [],
+      description: 'Exit list',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: newPara.id, offset: 0 });
+    useEditorStore.getState().clearSelection();
+    // Scroll the new paragraph into view (use window.document — the
+    // local `document` variable is shadowed by the editor document model).
+    requestAnimationFrame(() => {
+      const el = window.document.querySelector(`[data-block-id="${newPara.id}"]`);
+      el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    });
+  },
+
+  appendBlockToList: (blockId, listId) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const block = findNode(docClone, blockId);
+    const list = docClone.children.find((c) => c.id === listId) as List | undefined;
+    if (!block || !list || (block.type !== 'paragraph' && block.type !== 'heading')) return;
+
+    const text = getBlockText(block as Paragraph | Heading);
+    if (list.children.length === 0) return;
+
+    const lastItem = list.children[list.children.length - 1];
+    const lastPara = lastItem.children.find((c) => c.type === 'paragraph') as Paragraph | undefined;
+    if (!lastPara) return;
+
+    // Append the block's content to the last list item
+    const existingText = getBlockText(lastPara);
+    const savedId = lastPara.id;
+    lastPara.children[0].content = existingText + text;
+    lastPara.children.splice(1);
+    // Copy marks/style from first run of the source block
+    const sourceRuns = (block as Paragraph).children;
+    if (sourceRuns.length > 0 && sourceRuns[0].marks.length > 0) {
+      lastPara.children[0].marks = [...sourceRuns[0].marks];
+    }
+
+    // Remove the empty block
+    const blockIdx = docClone.children.findIndex((c) => c.id === blockId);
+    if (blockIdx >= 0) {
+      docClone.children.splice(blockIdx, 1);
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [],
+      inverse: [],
+      description: 'Merge with list',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: savedId, offset: existingText.length });
+    useEditorStore.getState().clearSelection();
+  },
+
+  prependListToBlock: (blockId, listId) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const block = findNode(docClone, blockId);
+    const list = docClone.children.find((c) => c.id === listId) as List | undefined;
+    if (!block || !list || (block.type !== 'paragraph' && block.type !== 'heading')) return;
+
+    if (list.children.length === 0) return;
+
+    const firstItem = list.children[0];
+    const firstPara = firstItem.children.find((c) => c.type === 'paragraph') as Paragraph | undefined;
+    if (!firstPara) return;
+
+    // Append the first item's content to the end of the block
+    const blockText = getBlockText(block as Paragraph | Heading);
+    const itemText = getBlockText(firstPara);
+    const savedId = block.id;
+    (block as Paragraph).children[0].content = blockText + itemText;
+    (block as Paragraph).children.splice(1);
+
+    // Remove the first list item
+    list.children.splice(0, 1);
+
+    // If the list is now empty, remove it
+    if (list.children.length === 0) {
+      const listIdx = docClone.children.findIndex((c) => c.id === list.id);
+      if (listIdx >= 0) {
+        docClone.children.splice(listIdx, 1);
+      }
+    }
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [],
+      inverse: [],
+      description: 'Merge with list',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: savedId, offset: blockText.length });
+    useEditorStore.getState().clearSelection();
   },
 
   insertImage: (afterBlockId, src, alt = '', width = 300, height = 200, inline = false) => {
@@ -1357,6 +1758,16 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
         nodeId: sd.anchor.nodeId,
         offset: sd.anchor.offset,
       };
+    } else if (entry.convertRangeSnapshot) {
+      // ── Convert-range snapshot: restore original blocks ────────
+      const crs = entry.convertRangeSnapshot;
+      const listIdx = docClone.children.findIndex(
+        (c) => c.type === 'list' && crs.blocks.length > 0 &&
+          (c as any).children?.[0]?.children?.[0]?.id === crs.blocks[0].id
+      );
+      const targetIdx = listIdx >= 0 ? listIdx : crs.atIndex;
+      docClone.children.splice(targetIdx, 1, ...crs.blocks);
+      cursorPos = { nodeId: crs.blocks[0]?.id ?? '', offset: 0 };
     } else {
       // ── Operation-based undo ──────────────────────────────────
       for (let i = entry.inverse.length - 1; i >= 0; i--) {
@@ -1415,6 +1826,9 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       };
       const result = deleteSelection(docClone, selection);
       cursorPos = result.newCursorPosition;
+    } else if (entry.convertRangeSnapshot) {
+      // Snapshot-based: redo would need original params — skip.
+      // The docClone is unchanged, cursor stays where it is.
     } else {
       // ── Operation-based redo ──────────────────────────────────
       for (const op of entry.forward) {

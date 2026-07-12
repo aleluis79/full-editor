@@ -113,6 +113,22 @@ export class LayoutEngine {
       case 'horizontalRule':
         layout = this.layoutHorizontalRule(block, startY);
         break;
+      case 'list':
+      case 'listItem':
+      case 'blockquote':
+        // Container blocks — their children are laid out individually by
+        // getBlockNodes. Skip them to avoid treating ListItem children as
+        // TextRuns (which crashes with "can't access Symbol.iterator").
+        layout = {
+          blockId: block.id,
+          blockType: block.type,
+          lines: [],
+          width: this.constraints.width,
+          height: 0,
+          y: startY,
+          x: this.constraints.marginLeft,
+        };
+        break;
       default:
         // For other block types, use a simple paragraph layout
         layout = this.layoutParagraph(block as unknown as Paragraph, startY);

@@ -257,7 +257,45 @@ export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
   const newParagraph = createParagraph('');
   newParagraph.children = newChildren;
 
-  // Insert new paragraph after the current one
+  // Check if paragraph is inside a list item — if so, create a new list item instead
+  // of a top-level paragraph, and insert it in the list.
+  for (const top of doc.children) {
+    if (top.type === 'list') {
+      const list = top as List;
+      for (let i = 0; i < list.children.length; i++) {
+        const item = list.children[i];
+        // Check if the split block is inside this list item (the paragraph itself
+        // or any nested list's paragraphs).
+        const found = item.id === op.blockId ||
+          item.children.some((c) => c.id === op.blockId ||
+            (c.type === 'list' && findNode(c, op.blockId)));
+        if (found) {
+          // Create a new list item with the overflow paragraph
+          const newItem = createListItem([newParagraph]);
+          list.children.splice(i + 1, 0, newItem);
+          return newParagraph.id;
+        }
+        // Check nested lists
+        if (item.children.some((c) => c.type === 'list')) {
+          for (const child of item.children) {
+            if (child.type === 'list') {
+              const nestedList = child as List;
+              for (let j = 0; j < nestedList.children.length; j++) {
+                const nestedItem = nestedList.children[j];
+                if (nestedItem.children.some((c) => c.id === op.blockId)) {
+                  const newNestedItem = createListItem([newParagraph]);
+                  nestedList.children.splice(j + 1, 0, newNestedItem);
+                  return newParagraph.id;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Not inside a list — insert as top-level paragraph
   const childIndex = doc.children.findIndex((c) => c.id === op.blockId);
   if (childIndex >= 0) {
     doc.children.splice(childIndex + 1, 0, newParagraph);

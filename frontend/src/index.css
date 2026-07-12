@@ -863,6 +863,19 @@ body {
   width: 100%;
 }
 
+/* List icons in toolbar */
+.toolbar-list-icon {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar-list-icon-ol {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 /* PDF icon badge */
 .pdf-icon {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

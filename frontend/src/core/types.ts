@@ -392,6 +392,11 @@ export interface HistoryEntry {
     anchor: { nodeId: NodeId; offset: number };
     focus: { nodeId: NodeId; offset: number };
   };
+  /** Snapshot for convertRangeToList undo — restores original blocks. */
+  convertRangeSnapshot?: {
+    blocks: BlockNode[];
+    atIndex: number;
+  };
 }
 
 // ============================================================

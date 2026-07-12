@@ -144,6 +144,47 @@ export function Toolbar({ onBack }: ToolbarProps) {
     convertBlock(cursor.position.nodeId, toType, attrs);
   };
 
+  const convertRangeToList = useDocumentStore((s) => s.convertRangeToList);
+
+  const handleToggleList = (ordered: boolean) => {
+    if (!hasCursor) return;
+    const { nodeId } = cursor.position;
+
+    // If there's a multi-block selection, use convertRangeToList
+    if (hasSelection) {
+      const { start, end } = getSelectionRange(selection!, doc);
+      if (start.nodeId !== end.nodeId) {
+        convertRangeToList(start.nodeId, end.nodeId, ordered);
+        return;
+      }
+    }
+
+    // Check if the cursor is already inside a list — find the parent list
+    const allBlocks = getBlockNodes(doc);
+    const parentList = allBlocks.find((b) => {
+      if (b.type !== 'list') return false;
+      const list = b as import('../core/types').List;
+      return list.children.some(
+        (item) =>
+          item.id === nodeId ||
+          item.children.some((child) => child.id === nodeId)
+      );
+    });
+
+    if (parentList) {
+      // Toggle off: convert list back to paragraph
+      convertBlock(parentList.id, 'paragraph');
+    } else {
+      // Toggle on: convert current block to list.
+      // If it's a heading, first convert to paragraph (lists don't nest headings).
+      const block = findNode(doc, nodeId);
+      if (block?.type === 'heading') {
+        convertBlock(nodeId, 'paragraph');
+      }
+      convertBlock(nodeId, 'list', { ordered });
+    }
+  };
+
   const handleSave = useCallback(async () => {
     try {
       await saveDocument();
@@ -431,6 +472,28 @@ export function Toolbar({ onBack }: ToolbarProps) {
           title="Clear Formatting"
         >
           <span style={{ fontFamily: 'sans-serif', fontSize: '14px' }}>↺</span>
+        </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      {/* Lists */}
+      <div className="toolbar-group">
+        <button
+          className={`toolbar-btn${activeBlockType === 'list-ul' ? ' toolbar-btn-active' : ''}`}
+          onClick={() => handleToggleList(false)}
+          disabled={!hasCursor}
+          title="Bullet List"
+        >
+          <span className="toolbar-list-icon">&#x2022;</span>
+        </button>
+        <button
+          className={`toolbar-btn${activeBlockType === 'list-ol' ? ' toolbar-btn-active' : ''}`}
+          onClick={() => handleToggleList(true)}
+          disabled={!hasCursor}
+          title="Numbered List"
+        >
+          <span className="toolbar-list-icon toolbar-list-icon-ol">1.</span>
         </button>
       </div>
 
