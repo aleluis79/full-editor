@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, Selection, Paragraph, Heading, List, ListItem, BlockNode } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, ResizeColumnOp, Selection, Paragraph, Heading, List, ListItem, BlockNode, Table } from '../core/types';
 import {
   createDocument,
   createParagraph,
@@ -33,6 +33,7 @@ import {
   applyDeleteTableRow,
   applyDeleteTableColumn,
   applyMergeTableCells,
+  applyResizeColumn,
   invertOperation,
   applyOperation,
 } from '../core/operations';
@@ -112,6 +113,7 @@ interface DocumentState {
   deleteTableRow: (tableId: NodeId, rowIndex: number) => void;
   deleteTableColumn: (tableId: NodeId, columnIndex: number) => void;
   mergeTableCells: (tableId: NodeId, startRow: number, startCol: number, endRow: number, endCol: number) => void;
+  resizeColumn: (tableId: NodeId, columnIndex: number, width: number) => void;
   undo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
   redo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
   getBlockText: (blockId: string) => string;
@@ -458,7 +460,13 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     };
 
     // Apply the operation to clone
-    const newBlockId = applySplitBlock(docClone, op);
+    let newBlockId: string | null;
+    try {
+      newBlockId = applySplitBlock(docClone, op);
+    } catch (e) {
+      console.error('splitBlock failed:', e, { blockId, offset });
+      return null;
+    }
 
     // Update the operation with the new block ID
     op.newBlockId = newBlockId;
@@ -1001,10 +1009,11 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     });
 
     // Return the ID of the newly inserted block
-    const blocks = getBlockNodes(docClone);
-    const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
-    return afterIndex >= 0 && afterIndex < blocks.length - 1
-      ? blocks[afterIndex + 1].id
+    // Use docClone.children directly instead of getBlockNodes to avoid
+    // picking up table internals (rows/cells) as the "next" block.
+    const childIdx = docClone.children.findIndex((c) => c.id === afterBlockId);
+    return childIdx >= 0 && childIdx < docClone.children.length - 1
+      ? docClone.children[childIdx + 1].id
       : '';
   },
 
@@ -1473,10 +1482,9 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     });
 
     // Return the ID of the newly inserted image
-    const blocks = getBlockNodes(docClone);
-    const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
-    return afterIndex >= 0 && afterIndex < blocks.length - 1
-      ? blocks[afterIndex + 1].id
+    const childIdx = docClone.children.findIndex((c) => c.id === afterBlockId);
+    return childIdx >= 0 && childIdx < docClone.children.length - 1
+      ? docClone.children[childIdx + 1].id
       : '';
   },
 
@@ -1547,10 +1555,9 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     });
 
     // Return the ID of the newly inserted table
-    const blocks = getBlockNodes(docClone);
-    const afterIndex = blocks.findIndex((b) => b.id === afterBlockId);
-    return afterIndex >= 0 && afterIndex < blocks.length - 1
-      ? blocks[afterIndex + 1].id
+    const childIdx = docClone.children.findIndex((c) => c.id === afterBlockId);
+    return childIdx >= 0 && childIdx < docClone.children.length - 1
+      ? docClone.children[childIdx + 1].id
       : '';
   },
 
@@ -1711,6 +1718,44 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       forward: [op],
       inverse: [invertOperation(op)],
       description: 'Merge table cells',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  resizeColumn: (tableId, columnIndex, width) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const table = findNode(docClone, tableId) as unknown as Table | null;
+    if (!table || table.type !== 'table') return;
+    const prevWidth = table.columnWidths[columnIndex] ?? 0;
+
+    const op: ResizeColumnOp = {
+      type: 'resizeColumn',
+      blockId: tableId,
+      columnIndex,
+      width,
+      prevWidth,
+    };
+
+    applyResizeColumn(docClone, op);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [op],
+      inverse: [invertOperation(op)],
+      description: 'Resize column',
     };
 
     const newHistory = history.slice(0, historyIndex + 1);

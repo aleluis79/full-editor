@@ -10,6 +10,9 @@ interface EditorState {
   selection: Selection | null;
   focused: boolean;
   clickCount: number; // 1 = single, 2 = double, 3 = triple
+  /** When a table is selected (clicked on header/actions) the alignment
+   *  buttons apply to the whole table instead of the cell text. */
+  selectedTableId: string | null;
   /** Monotonically increasing counter that increments on every
    *  cursor position change. Used as a dependency in Toolbar's
    *  activeStyles computation to force reliable recomputation. */
@@ -32,6 +35,7 @@ interface EditorState {
 
   // Actions
   setCursorPosition: (position: LogicalPosition) => void;
+  selectTable: (tableId: string | null) => void;
   setSelection: (selection: Selection | null) => void;
   setFocused: (focused: boolean) => void;
   clearSelection: () => void;
@@ -54,17 +58,22 @@ export const useEditorStore = create<EditorState>((set) => ({
   focused: false,
   clickCount: 0,
   cursorVersion: 0,
+  selectedTableId: null,
   stickyMarks: [],
   stickyAttrs: {},
   stickyBreakOut: false,
   stickyToggledOff: null,
 
+  selectTable: (tableId) => {
+    set({ selectedTableId: tableId });
+  },
+
   setCursorPosition: (position) => {
     set((state) => ({
       cursor: { position },
       cursorVersion: state.cursorVersion + 1,
-      // Cursor moved: clear the toggled-off mark so the toolbar
-      // resumes reflecting the actual cursor position styles.
+      // Cursor moved: clear the toggled-off mark so the toolbar resumes
+      // reflecting the actual cursor position styles.
       stickyToggledOff: null,
     }));
   },

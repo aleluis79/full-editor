@@ -55,6 +55,10 @@ class PDFExporter:
     def __init__(self):
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+        # Will be set during export()
+        self._page_width = 595
+        self._left_margin = 72
+        self._right_margin = 72
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""
@@ -119,6 +123,11 @@ class PDFExporter:
         if page_breaks is None:
             page_breaks = []
         
+        # Store page dimensions for child methods
+        self._page_width = PAPER_SIZES.get(paper_size, A4)[0]
+        self._left_margin = margins.get("left", 72)
+        self._right_margin = margins.get("right", 72)
+        
         # Create PDF in memory
         buffer = io.BytesIO()
         
@@ -129,8 +138,8 @@ class PDFExporter:
         doc = SimpleDocTemplate(
             buffer,
             pagesize=page_size,
-            rightMargin=margins.get("right", 72),
-            leftMargin=margins.get("left", 72),
+            rightMargin=self._right_margin,
+            leftMargin=self._left_margin,
             topMargin=margins.get("top", 72),
             bottomMargin=margins.get("bottom", 72),
         )
@@ -275,37 +284,84 @@ class PDFExporter:
     def _process_table(self, block: Dict[str, Any]) -> List:
         """Process table block."""
         rows = block.get("rows", [])
+        column_widths = block.get("columnWidths", [])
         if not rows:
             return []
         
-        # Convert to ReportLab table format
+        # Convert to ReportLab table format, tracking per-cell alignment
+        align_map = {'left': 'LEFT', 'center': 'CENTER', 'right': 'RIGHT'}
         table_data = []
-        for row in rows:
+        cell_alignments = []  # (row_index, col_index, 'LEFT'|'CENTER'|'RIGHT')
+        
+        for ri, row in enumerate(rows):
             row_data = []
-            for cell in row.get("cells", []):
+            for ci, cell in enumerate(row.get("cells", [])):
                 if cell.get("colSpan", 1) > 0:
                     text = self._extract_text(cell)
                     row_data.append(text)
+                    # Check paragraph-level alignment
+                    children = cell.get("children", [])
+                    align = None
+                    for p in children:
+                        p_attrs = p.get("attrs") or {}
+                        if p_attrs.get("textAlign"):
+                            align = align_map.get(p_attrs["textAlign"], "LEFT")
+                            break
+                    if align:
+                        cell_alignments.append((ri, ci, align))
             if row_data:
                 table_data.append(row_data)
         
         if not table_data:
             return []
         
-        # Create table
-        table = Table(table_data)
+        # Column widths from the frontend are in CSS pixels (96 DPI).
+        # Convert to ReportLab points (72 DPI): px * 72/96 = px * 0.75.
+        # Then scale to fit within the page content area if needed.
+        content_width = self._page_width - self._left_margin - self._right_margin
+        raw_widths = [float(w) * 0.75 for w in column_widths] if column_widths else None
+        if raw_widths:
+            total = sum(raw_widths)
+            if total > content_width:
+                scale = content_width / total
+                col_widths = [w * scale for w in raw_widths]
+            else:
+                col_widths = raw_widths
         
-        # Add style
-        style = TableStyle([
+        # Determine table alignment from block attrs
+        attrs = block.get("attrs", {}) or {}
+        h_align = align_map.get(attrs.get("textAlign", "left"), 'LEFT')
+        
+        # Create table with explicit column widths
+        table = Table(table_data, colWidths=col_widths, hAlign=h_align)
+        
+        # Build style commands
+        style_cmds = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ])
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]
+        
+        # Apply per-cell alignment overrides
+        for ri, ci, al in cell_alignments:
+            # Account for header row offset: rows[0] is the header at (0, 0)
+            # ci may need adjustment for colspan/rowspan, but for simple cases
+            # the col index in row.cells matches the column position.
+            if ri < len(table_data) and ci < len(table_data[ri]):
+                style_cmds.append(('ALIGN', (ci, ri), (ci, ri), al))
+        
+        style = TableStyle(style_cmds)
         table.setStyle(style)
         
         return [table]

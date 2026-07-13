@@ -169,12 +169,12 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
           const block = blocks.find((b) => b.id === blockLayout.blockId);
           if (!block) return null;
 
-          // Skip blocks that are inside list/blockquote containers — those
-          // containers render their own children (ListBlock, BlockquoteBlock)
-          // via DOM flow. Including them here would duplicate the content.
-          if (block.type !== 'list' && block.type !== 'blockquote') {
+          // Skip blocks that are inside containers (list, blockquote, table) — those
+          // containers render their own children via DOM flow. Including them here
+          // would duplicate the content (double cursor, double rendering).
+          if (block.type !== 'list' && block.type !== 'blockquote' && block.type !== 'table') {
             // Check if this block is a child of a container
-            const isInsideList = blocks.some((b) =>
+            const isInsideContainer = blocks.some((b) =>
               (b.type === 'list' || b.type === 'blockquote') &&
               'children' in b &&
               (b as any).children?.some((item: any) =>
@@ -182,8 +182,21 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
                 (item.children && (item as any).children?.some((c: any) => c.id === block.id))
               )
             );
-            if (isInsideList) return null;
+            if (isInsideContainer) return null;
           }
+
+          // Skip blocks inside table cells — TableBlock renders its own children
+          const doc = useDocumentStore.getState().document;
+          const isInsideTable = doc.children.some((top) => {
+            if (top.type !== 'table') return false;
+            const table = top as any;
+            return table.rows?.some((row: any) =>
+              row.cells?.some((cell: any) =>
+                cell.children?.some((p: any) => p.id === block.id),
+              ),
+            );
+          });
+          if (isInsideTable) return null;
 
           return (
             <div

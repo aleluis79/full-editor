@@ -126,6 +126,8 @@ export interface Table extends BaseNode {
   rows: TableRow[];
   /** Column widths in pixels */
   columnWidths: number[];
+  /** Block-level attributes (text alignment, etc.) */
+  attrs?: BlockAttrs;
 }
 
 /** Section — can contain blocks */
@@ -354,6 +356,14 @@ export interface MergeTableCellsOp extends BaseOperation {
   endCol: number;
 }
 
+/** Resize table column operation */
+export interface ResizeColumnOp extends BaseOperation {
+  type: 'resizeColumn';
+  columnIndex: number;
+  width: number;
+  prevWidth: number;
+}
+
 /** Union of all operations */
 export type Operation =
   | InsertTextOp
@@ -373,7 +383,8 @@ export type Operation =
   | AddTableColumnOp
   | DeleteTableRowOp
   | DeleteTableColumnOp
-  | MergeTableCellsOp;
+  | MergeTableCellsOp
+  | ResizeColumnOp;
 
 /** History entry — stores forward and inverse operations */
 export interface HistoryEntry {

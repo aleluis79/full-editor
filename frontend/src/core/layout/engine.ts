@@ -20,7 +20,7 @@ import type {
   PositionedRun,
 } from './types';
 import { measureText, splitIntoWords } from './measure';
-import { getBlockNodes } from '../document';
+import { getLayoutBlocks } from '../document';
 
 /** Default layout constraints */
 export const DEFAULT_CONSTRAINTS: LayoutConstraints = {
@@ -68,7 +68,7 @@ export class LayoutEngine {
     // get positioned at wrong Y coordinates (overlapping).
     this.blockCache.clear();
 
-    const blocks = getBlockNodes(doc);
+    const blocks = getLayoutBlocks(doc);
     const result: BlockLayout[] = [];
     let currentY = 0;
 
@@ -116,9 +116,11 @@ export class LayoutEngine {
       case 'list':
       case 'listItem':
       case 'blockquote':
-        // Container blocks — their children are laid out individually by
-        // getBlockNodes. Skip them to avoid treating ListItem children as
-        // TextRuns (which crashes with "can't access Symbol.iterator").
+      case 'tableRow':
+      case 'tableCell':
+        // Container blocks — their children are laid out individually
+        // (or by layoutTable for table rows/cells). Skip them to avoid
+        // treating non-text nodes as TextRuns.
         layout = {
           blockId: block.id,
           blockType: block.type,
@@ -236,28 +238,30 @@ export class LayoutEngine {
   private layoutTable(table: Table, startY: number): BlockLayout {
     const { rows, columnWidths } = table;
 
-    // Calculate total table width
-    const totalWidth = columnWidths.reduce((sum, w) => sum + w, 0);
-
     // Calculate row heights (based on content)
     const rowHeights: number[] = [];
     for (const row of rows) {
-      let maxHeight = 20; // Minimum row height
-      for (const cell of row.cells) {
+      let maxHeight = 0;
+      for (let ci = 0; ci < row.cells.length; ci++) {
+        const cell = row.cells[ci];
         if (cell.colSpan === 0) continue; // Skip merged cells
-        const cellHeight = this.layoutTableCell(cell).height;
+        // Sum column widths for merged cells
+        const cellWidth = columnWidths.slice(ci, ci + (cell.colSpan || 1)).reduce((s, w) => s + w, 0);
+        const cellHeight = this.layoutTableCell(cell, cellWidth).height;
         maxHeight = Math.max(maxHeight, cellHeight);
       }
       rowHeights.push(maxHeight);
     }
 
-    const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
+    // Account for the + Row button below the table so the next block
+    // starts below it and doesn't overlap with the clickable button.
+    const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0) + 24;
 
     return {
       blockId: table.id,
       blockType: 'table',
       lines: [],
-      width: totalWidth,
+      width: this.constraints.width, // Use content area width so alignment works
       height: totalHeight,
       y: startY,
       x: 0,
@@ -267,19 +271,21 @@ export class LayoutEngine {
   /**
    * Layout a table cell
    */
-  private layoutTableCell(cell: TableCell): { width: number; height: number } {
-    const cellWidth = 200; // Default cell width
+  private layoutTableCell(cell: TableCell, cellWidth: number): { width: number; height: number } {
     let totalHeight = 0;
+    // Each paragraph has min-height: 1.5em from CSS
+    const paraMinHeight = this.constraints.fontSize * this.constraints.lineHeight;
 
     for (const paragraph of cell.children) {
-      const lines = this.layoutTextRuns(paragraph.children, this.constraints);
+      const cellConstraints = { ...this.constraints, width: cellWidth };
+      const lines = this.layoutTextRuns(paragraph.children, cellConstraints);
       const paragraphHeight = lines.reduce((sum, line) => sum + line.height, 0);
-      totalHeight += paragraphHeight;
+      totalHeight += Math.max(paraMinHeight, paragraphHeight);
     }
 
     return {
       width: cellWidth,
-      height: Math.max(20, totalHeight + 16), // Add padding
+      height: totalHeight + 16, // Add padding (8px top + 8px bottom)
     };
   }
 

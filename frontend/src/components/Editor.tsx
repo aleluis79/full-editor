@@ -3,7 +3,7 @@ import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { useLayoutStore } from '../stores/layout-store';
 import { usePageStore } from '../stores/page-store';
-import { getBlockNodes, getPreviousBlock, getNextBlock, getBlockText, findNode, findListContext } from '../core/document';
+import { getBlockNodes, getPreviousBlock, getNextBlock, getBlockText, findNode, findListContext, findTableCellContext, cloneDocument } from '../core/document';
 import {
   moveCursorRight,
   moveCursorLeft,
@@ -16,6 +16,28 @@ import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition 
 import { DocumentView } from './DocumentView';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
+import type { Table, DocumentRoot } from '../core/types';
+
+/** Walk the document tree to find if a nodeId lives inside a table cell. */
+function findTableContext(
+  doc: DocumentRoot,
+  nodeId: string,
+): { table: Table; rowIndex: number; colIndex: number } | null {
+  for (const child of doc.children) {
+    if (child.type === 'table') {
+      const table = child as Table;
+      for (let ri = 0; ri < table.rows.length; ri++) {
+        for (let ci = 0; ci < table.rows[ri].cells.length; ci++) {
+          const cell = table.rows[ri].cells[ci];
+          if (cell.children.some((p) => p.id === nodeId)) {
+            return { table, rowIndex: ri, colIndex: ci };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
 
 interface EditorProps {
   onBack?: () => void;
@@ -24,6 +46,7 @@ interface EditorProps {
 export function Editor({ onBack }: EditorProps) {
   const doc = useDocumentStore((s) => s.document);
   const saveDocument = useDocumentStore((s) => s.saveDocument);
+  const insertBlock = useDocumentStore((s) => s.insertBlock);
   const insertText = useDocumentStore((s) => s.insertText);
   const deleteText = useDocumentStore((s) => s.deleteText);
   const splitBlock = useDocumentStore((s) => s.splitBlock);
@@ -144,6 +167,8 @@ export function Editor({ onBack }: EditorProps) {
       const blockEl = document.querySelector(
         `[data-block-id="${blockId}"]`
       ) as HTMLElement | null;
+      // Clicking on block content deselects any selected table
+      useEditorStore.getState().selectTable(null);
       if (blockEl) {
         const offset = getOffsetFromPoint(blockEl, clientX, clientY);
         setCursorPosition({ nodeId: blockId, offset });
@@ -469,6 +494,47 @@ export function Editor({ onBack }: EditorProps) {
             setCursorPosition(result.newCursorPosition);
             clearSelection();
           } else if (offset === 0) {
+            // Check if we're at the start of a paragraph inside a table cell
+            const tableCtx = findTableCellContext(doc, nodeId);
+            if (tableCtx) {
+              if (tableCtx.paraIndex > 0) {
+                // Check if current paragraph is empty → remove it
+                const currText = getBlockText(tableCtx.cell.children[tableCtx.paraIndex] as Paragraph);
+                if (currText === '') {
+                  // Remove the empty paragraph and move cursor to end of previous
+                  const fresh = cloneDocument(useDocumentStore.getState().document);
+                  const ctx = findTableCellContext(fresh, nodeId);
+                  if (ctx) {
+                    ctx.cell.children.splice(ctx.paraIndex, 1);
+                  }
+                  useDocumentStore.setState({ document: fresh, isDirty: true });
+                }
+                const prevPara = tableCtx.cell.children[tableCtx.paraIndex - 1];
+                const prevText = getBlockText(prevPara);
+                setCursorPosition({ nodeId: prevPara.id, offset: prevText.length });
+                clearSelection();
+                break;
+              } else if (tableCtx.colIndex > 0 || tableCtx.rowIndex > 0) {
+                // First paragraph in cell → go to previous cell's last paragraph
+                let prevRow = tableCtx.rowIndex;
+                let prevCol = tableCtx.colIndex - 1;
+                if (prevCol < 0) {
+                  prevRow = tableCtx.rowIndex - 1;
+                  prevCol = tableCtx.table.rows[prevRow].cells.length - 1;
+                }
+                const prevCell = tableCtx.table.rows[prevRow].cells[prevCol];
+                const lastPara = prevCell.children[prevCell.children.length - 1];
+                if (lastPara) {
+                  const lastText = getBlockText(lastPara);
+                  setCursorPosition({ nodeId: lastPara.id, offset: lastText.length });
+                  clearSelection();
+                  break;
+                }
+              }
+              // First cell, first paragraph → do nothing
+              break;
+            }
+
             // Check if we're at the start of a paragraph inside a list
             const listCtx = findListContext(doc, nodeId);
             if (listCtx) {
@@ -822,7 +888,54 @@ export function Editor({ onBack }: EditorProps) {
 
         case 'Tab': {
           e.preventDefault();
-          const indent = '    '; // 4 spaces
+
+          // Check if cursor is inside a table cell → navigate cells
+          const freshDoc = useDocumentStore.getState().document;
+          const tableCtx = findTableContext(freshDoc, nodeId);
+          if (tableCtx) {
+            const { table, rowIndex, colIndex } = tableCtx;
+            let nextRow = rowIndex;
+            let nextCol = colIndex;
+
+            if (e.shiftKey) {
+              // Shift+Tab: previous cell
+              if (colIndex > 0) {
+                nextCol = colIndex - 1;
+              } else if (rowIndex > 0) {
+                nextRow = rowIndex - 1;
+                nextCol = table.rows[nextRow].cells.length - 1;
+              } else {
+                break; // First cell, do nothing
+              }
+            } else {
+              // Tab: next cell
+              if (colIndex < table.rows[rowIndex].cells.length - 1) {
+                nextCol = colIndex + 1;
+              } else if (rowIndex < table.rows.length - 1) {
+                nextRow = rowIndex + 1;
+                nextCol = 0;
+              } else {
+                // Last cell → exit table by inserting a new paragraph after it
+                const newParaId = insertBlock(table.id, 'paragraph');
+                if (newParaId) {
+                  setCursorPosition({ nodeId: newParaId, offset: 0 });
+                  clearSelection();
+                }
+                break;
+              }
+            }
+
+            const targetCell = table.rows[nextRow].cells[nextCol];
+            const firstPara = targetCell.children[0];
+            if (firstPara) {
+              setCursorPosition({ nodeId: firstPara.id, offset: 0 });
+              clearSelection();
+            }
+            break;
+          }
+
+          // Not in a table: insert 4 spaces
+          const indent = '    ';
           if (hasSelection) {
             const result = replaceSelection(selection!, indent);
             setCursorPosition(result.newCursorPosition);
@@ -852,7 +965,7 @@ export function Editor({ onBack }: EditorProps) {
     },
     [
       cursor, doc, selection,
-      saveDocument, insertText, deleteText, splitBlock, mergeBlocks,
+      saveDocument, insertBlock, insertText, deleteText, splitBlock, mergeBlocks,
       deleteSelection, replaceSelection, toggleMark,
       undo, redo,
       setCursorPosition, setSelection, clearSelection, extendSelection,
@@ -950,7 +1063,11 @@ export function Editor({ onBack }: EditorProps) {
   }, [setCursorPosition, setSelection, clearSelection]);
 
   return (
-    <div className="editor" ref={containerRef}>
+    <div
+      className="editor"
+      ref={containerRef}
+      onMouseDown={() => useEditorStore.getState().selectTable(null)}
+    >
       <Toolbar onBack={onBack} />
 
       {/* Hidden textarea for keyboard input */}

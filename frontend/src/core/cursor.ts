@@ -1,5 +1,5 @@
 import type { Cursor, Paragraph, Heading, DocumentRoot } from './types';
-import { getBlockText, getBlockNodes, getNextBlock, getPreviousBlock } from './document';
+import { getBlockText, getBlockNodes, findNode } from './document';
 
 // ============================================================
 // Cursor Helpers
@@ -26,8 +26,7 @@ export function moveCursorRight(
   cursor: Cursor
 ): Cursor {
   const { nodeId, offset } = cursor.position;
-  const blocks = getBlockNodes(doc);
-  const currentBlock = blocks.find((b) => b.id === nodeId);
+  const currentBlock = findNode(doc, nodeId);
 
   if (!currentBlock || (currentBlock.type !== 'paragraph' && currentBlock.type !== 'heading')) {
     return cursor;
@@ -40,11 +39,14 @@ export function moveCursorRight(
     return { position: { nodeId, offset: offset + 1 } };
   }
 
-  // Move to next paragraph/heading block — skip intermediates (list items, lists, etc.)
+  // Move to next paragraph/heading block — skip intermediates
+  const blocks = getBlockNodes(doc);
   const idx = blocks.findIndex((b) => b.id === nodeId);
-  for (let i = idx + 1; i < blocks.length; i++) {
-    if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
-      return { position: { nodeId: blocks[i].id, offset: 0 } };
+  if (idx >= 0) {
+    for (let i = idx + 1; i < blocks.length; i++) {
+      if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
+        return { position: { nodeId: blocks[i].id, offset: 0 } };
+      }
     }
   }
 
@@ -65,10 +67,12 @@ export function moveCursorLeft(
   // Move to end of previous paragraph/heading block — skip intermediates
   const blocks = getBlockNodes(doc);
   const idx = blocks.findIndex((b) => b.id === nodeId);
-  for (let i = idx - 1; i >= 0; i--) {
-    if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
-      const text = getBlockText(blocks[i] as Paragraph | Heading);
-      return { position: { nodeId: blocks[i].id, offset: text.length } };
+  if (idx >= 0) {
+    for (let i = idx - 1; i >= 0; i--) {
+      if (blocks[i].type === 'paragraph' || blocks[i].type === 'heading') {
+        const text = getBlockText(blocks[i] as Paragraph | Heading);
+        return { position: { nodeId: blocks[i].id, offset: text.length } };
+      }
     }
   }
 
@@ -88,8 +92,7 @@ export function moveCursorToLineEnd(
   doc: DocumentRoot,
   cursor: Cursor
 ): Cursor {
-  const blocks = getBlockNodes(doc);
-  const currentBlock = blocks.find((b) => b.id === cursor.position.nodeId);
+  const currentBlock = findNode(doc, cursor.position.nodeId);
 
   if (!currentBlock || (currentBlock.type !== 'paragraph' && currentBlock.type !== 'heading')) {
     return cursor;
@@ -104,11 +107,11 @@ export function clampCursor(
   doc: DocumentRoot,
   cursor: Cursor
 ): Cursor {
-  const blocks = getBlockNodes(doc);
-  const currentBlock = blocks.find((b) => b.id === cursor.position.nodeId);
+  const currentBlock = findNode(doc, cursor.position.nodeId);
 
   if (!currentBlock) {
     // Block not found, move to first block
+    const blocks = getBlockNodes(doc);
     const firstBlock = blocks[0];
     if (firstBlock) {
       return { position: { nodeId: firstBlock.id, offset: 0 } };

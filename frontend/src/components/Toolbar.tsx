@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { getSelectionRange, isSelectionEmpty } from '../core/selection';
@@ -40,6 +40,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const convertBlock = useDocumentStore((s) => s.convertBlock);
   const setBlockAttrs = useDocumentStore((s) => s.setBlockAttrs);
   const setBlockAttrsRange = useDocumentStore((s) => s.setBlockAttrsRange);
+  const insertTable = useDocumentStore((s) => s.insertTable);
 
   const currentDocId = useDocumentStore((s) => s.currentDocId);
   const documentTitle = useDocumentStore((s) => s.documentTitle);
@@ -48,6 +49,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const isDirty = useDocumentStore((s) => s.isDirty);
   const isSaving = useDocumentStore((s) => s.isSaving);
   const markDirty = useDocumentStore((s) => s.markDirty);
+  const selectedTableId = useEditorStore((s) => s.selectedTableId);
 
   const pageConfig = usePageStore((s) => s.config);
   const updatePaperSize = usePageStore((s) => s.updatePaperSize);
@@ -57,6 +59,12 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Table picker state ─────────────────────────────────────
+  const [showTablePicker, setShowTablePicker] = useState(false);
+  const [hoveredRow, setHoveredRow] = useState(-1);
+  const [hoveredCol, setHoveredCol] = useState(-1);
+  const tablePickerRef = useRef<HTMLDivElement>(null);
 
   const hasSelection = selection && !isSelectionEmpty(selection);
   const hasCursor = cursor.position.nodeId !== '';
@@ -100,6 +108,18 @@ export function Toolbar({ onBack }: ToolbarProps) {
     }
     return activeStyles?.attrs ?? {};
   }, [stickyMarks, stickyAttrs, activeStyles]);
+
+  // Close table picker on outside click
+  useEffect(() => {
+    if (!showTablePicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tablePickerRef.current && !tablePickerRef.current.contains(e.target as Node)) {
+        setShowTablePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTablePicker]);
 
   // ── Handlers ───────────────────────────────────────────────
 
@@ -183,6 +203,12 @@ export function Toolbar({ onBack }: ToolbarProps) {
       }
       convertBlock(nodeId, 'list', { ordered });
     }
+  };
+
+  const handleInsertTable = (rows: number, cols: number) => {
+    if (!hasCursor) return;
+    insertTable(cursor.position.nodeId, rows, cols);
+    setShowTablePicker(false);
   };
 
   const handleSave = useCallback(async () => {
@@ -403,7 +429,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection) {
+            const selectedTable = useEditorStore.getState().selectedTableId;
+            if (selectedTable) {
+              setBlockAttrs(selectedTable, { textAlign: 'left' });
+            } else if (hasSelection) {
               const startBlock = selection!.anchor.nodeId;
               const endBlock = selection!.focus.nodeId;
               if (startBlock !== endBlock) {
@@ -415,7 +444,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'left' });
             }
           }}
-          disabled={!hasCursor && !hasSelection}
+          disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Alinear a la izquierda"
         >
           <span className="align-icon"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
@@ -423,7 +452,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection) {
+            const selectedTable = useEditorStore.getState().selectedTableId;
+            if (selectedTable) {
+              setBlockAttrs(selectedTable, { textAlign: 'center' });
+            } else if (hasSelection) {
               const startBlock = selection!.anchor.nodeId;
               const endBlock = selection!.focus.nodeId;
               if (startBlock !== endBlock) {
@@ -435,7 +467,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'center' });
             }
           }}
-          disabled={!hasCursor && !hasSelection}
+          disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Centrar"
         >
           <span className="align-icon align-icon-center"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
@@ -443,7 +475,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => {
-            if (hasSelection) {
+            const selectedTable = useEditorStore.getState().selectedTableId;
+            if (selectedTable) {
+              setBlockAttrs(selectedTable, { textAlign: 'right' });
+            } else if (hasSelection) {
               const startBlock = selection!.anchor.nodeId;
               const endBlock = selection!.focus.nodeId;
               if (startBlock !== endBlock) {
@@ -455,7 +490,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
               setBlockAttrs(cursor.position.nodeId, { textAlign: 'right' });
             }
           }}
-          disabled={!hasCursor && !hasSelection}
+          disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Alinear a la derecha"
         >
           <span className="align-icon align-icon-right"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
@@ -597,6 +632,50 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <option value="heading2">Heading 2</option>
           <option value="heading3">Heading 3</option>
         </select>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      {/* Table */}
+      <div className="toolbar-group" style={{ position: 'relative' }}>
+        <button
+          className="toolbar-btn toolbar-btn-table"
+          onClick={() => setShowTablePicker(!showTablePicker)}
+          title="Insert Table"
+        >
+          ⊞
+        </button>
+        {showTablePicker && (
+          <div
+            className="table-picker-popover"
+            ref={tablePickerRef}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <div
+              className="table-picker-grid"
+              onMouseLeave={() => { setHoveredRow(-1); setHoveredCol(-1); }}
+            >
+              {Array.from({ length: 25 }, (_, i) => {
+                const r = Math.floor(i / 5);
+                const c = i % 5;
+                const isActive = r <= hoveredRow && c <= hoveredCol;
+                return (
+                  <div
+                    key={i}
+                    className={`table-picker-cell${hoveredRow >= 0 && hoveredCol >= 0 && isActive ? ' active' : ''}`}
+                    onMouseEnter={() => { setHoveredRow(r); setHoveredCol(c); }}
+                    onClick={() => handleInsertTable(r + 1, c + 1)}
+                  />
+                );
+              })}
+            </div>
+            {hoveredRow >= 0 && hoveredCol >= 0 && (
+              <div className="table-picker-label">
+                {hoveredRow + 1} × {hoveredCol + 1}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
     </div>

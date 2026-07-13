@@ -201,21 +201,49 @@ export function createDocument(children: BlockNode[] = []): DocumentRoot {
 // Document Traversal
 // ============================================================
 
-/** Get all block nodes in document order */
+/** Get all block nodes in document order (includes table internals for operations) */
 export function getBlockNodes(doc: DocumentRoot): BlockNode[] {
   const result: BlockNode[] = [];
 
   function walk(node: { children: BlockNode[] }) {
     for (const child of node.children) {
-      // Skip inline nodes (TextRun) — they are not blocks and should not
-      // participate in sibling navigation. Without this, getNextBlock /
-      // getPreviousBlock return TextRun nodes, causing arrow-key navigation
-      // to stall at block boundaries.
-      // Note: BlockNode union doesn't include 'text', but Paragraph.children
-      // is TextRun[] at runtime, so we need the cast.
       if ((child as { type: string }).type === 'text') continue;
 
       result.push(child);
+
+      if (child.type === 'table') {
+        const table = child as unknown as Table;
+        for (const row of table.rows) {
+          result.push(row as unknown as BlockNode);
+          for (const cell of row.cells) {
+            result.push(cell as unknown as BlockNode);
+            if (hasChildren(cell)) {
+              walk(cell as unknown as { children: BlockNode[] });
+            }
+          }
+        }
+        continue;
+      }
+
+      if (hasChildren(child)) {
+        walk(child as { children: BlockNode[] });
+      }
+    }
+  }
+
+  walk(doc);
+  return result;
+}
+
+/** Get blocks for layout — skips table internals to avoid double-counting heights. */
+export function getLayoutBlocks(doc: DocumentRoot): BlockNode[] {
+  const result: BlockNode[] = [];
+
+  function walk(node: { children: BlockNode[] }) {
+    for (const child of node.children) {
+      if ((child as { type: string }).type === 'text') continue;
+      result.push(child);
+      if (child.type === 'table') continue; // table handles its own layout
       if (hasChildren(child)) {
         walk(child as { children: BlockNode[] });
       }
@@ -235,9 +263,25 @@ export function findNode(
 
   for (const child of doc.children) {
     if (child.id === id) return child;
+
     if (hasChildren(child)) {
       const found = findNodeInChildren(child, id);
       if (found) return found;
+    }
+
+    // Table uses `rows` (not `children`) — traverse into rows → cells
+    if (child.type === 'table') {
+      const table = child as unknown as Table;
+      for (const row of table.rows) {
+        if (row.id === id) return row as unknown as BlockNode;
+        for (const cell of row.cells) {
+          if (cell.id === id) return cell as unknown as BlockNode;
+          if (hasChildren(cell)) {
+            const found = findNodeInChildren(cell as unknown as { children: BlockNode[] }, id);
+            if (found) return found;
+          }
+        }
+      }
     }
   }
 
@@ -250,9 +294,25 @@ function findNodeInChildren(
 ): BlockNode | null {
   for (const child of node.children) {
     if (child.id === id) return child;
+
     if (hasChildren(child)) {
       const found = findNodeInChildren(child as { children: BlockNode[] }, id);
       if (found) return found;
+    }
+
+    // Table uses `rows` (not `children`) — traverse into rows → cells → paragraphs
+    if (child.type === 'table') {
+      const table = child as unknown as Table;
+      for (const row of table.rows) {
+        if (row.id === id) return row as unknown as BlockNode;
+        for (const cell of row.cells) {
+          if (cell.id === id) return cell as unknown as BlockNode;
+          if (hasChildren(cell)) {
+            const found = findNodeInChildren(cell as unknown as { children: BlockNode[] }, id);
+            if (found) return found;
+          }
+        }
+      }
     }
   }
 
@@ -314,9 +374,25 @@ function findParentInChildren(
 ): { children: BlockNode[] } | null {
   for (const child of node.children) {
     if (child.id === id) return node;
+
     if (hasChildren(child)) {
       const found = findParentInChildren(child as { children: BlockNode[] }, id);
       if (found) return found;
+    }
+
+    // Table uses `rows` → `cells` (not `children`) — traverse into them
+    if (child.type === 'table') {
+      const table = child as unknown as Table;
+      for (const row of table.rows) {
+        if (row.id === id) return { children: table.rows as unknown as BlockNode[] };
+        for (const cell of row.cells) {
+          if (cell.id === id) return { children: row.cells as unknown as BlockNode[] };
+          if (hasChildren(cell)) {
+            const found = findParentInChildren(cell as unknown as { children: BlockNode[] }, id);
+            if (found) return found;
+          }
+        }
+      }
     }
   }
 
@@ -401,5 +477,39 @@ export function getRunStylesAtOffset(
     };
   }
 
+  return null;
+}
+
+/**
+ * Find the table cell that contains the given paragraph nodeId.
+ * Returns the cell, its parent row, the row/column indices, and
+ * the paragraph index within the cell.
+ */
+export function findTableCellContext(
+  doc: DocumentRoot,
+  nodeId: string,
+): {
+  table: Table;
+  row: TableRow;
+  cell: TableCell;
+  rowIndex: number;
+  colIndex: number;
+  paraIndex: number;
+} | null {
+  for (const child of doc.children) {
+    if (child.type === 'table') {
+      const table = child as unknown as Table;
+      for (let ri = 0; ri < table.rows.length; ri++) {
+        const row = table.rows[ri];
+        for (let ci = 0; ci < row.cells.length; ci++) {
+          const cell = row.cells[ci];
+          const pi = cell.children.findIndex((p) => p.id === nodeId);
+          if (pi >= 0) {
+            return { table, row, cell, rowIndex: ri, colIndex: ci, paraIndex: pi };
+          }
+        }
+      }
+    }
+  }
   return null;
 }

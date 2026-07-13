@@ -5,6 +5,7 @@ import type {
   Blockquote,
   List,
   Table,
+  TableCell,
   TextRun,
   BlockNode,
   NodeId,
@@ -28,6 +29,7 @@ import type {
   DeleteTableRowOp,
   DeleteTableColumnOp,
   MergeTableCellsOp,
+  ResizeColumnOp,
   Operation,
 } from './types';
 import {
@@ -71,7 +73,24 @@ export function applyInsertText(
   marks?: MarkType[],
   attrs?: StyleAttrs,
 ): void {
-  const block = findNode(doc, op.blockId);
+  let block = findNode(doc, op.blockId);
+
+  // Fallback: search inside table cells directly
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    for (const top of doc.children) {
+      if (top.type === 'table') {
+        const table = top as unknown as Table;
+        for (const row of table.rows) {
+          for (const cell of row.cells) {
+            const found = cell.children.find((p) => p.id === op.blockId);
+            if (found) { block = found; break; }
+          }
+          if (block && (block.type === 'paragraph' || block.type === 'heading')) break;
+        }
+      }
+      if (block && (block.type === 'paragraph' || block.type === 'heading')) break;
+    }
+  }
 
   if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
     throw new Error(`Block ${op.blockId} not found or is not a text block`);
@@ -158,7 +177,25 @@ export function createDeleteTextOp(
 }
 
 export function applyDeleteText(doc: DocumentRoot, op: DeleteTextOp): void {
-  const block = findNode(doc, op.blockId);
+  let block = findNode(doc, op.blockId);
+
+  // Fallback: search inside table cells directly
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    for (const top of doc.children) {
+      if (top.type === 'table') {
+        const table = top as unknown as Table;
+        for (const row of table.rows) {
+          for (const cell of row.cells) {
+            const found = cell.children.find((p) => p.id === op.blockId);
+            if (found) { block = found; break; }
+          }
+          if (block && (block.type === 'paragraph' || block.type === 'heading')) break;
+        }
+      }
+      if (block && (block.type === 'paragraph' || block.type === 'heading')) break;
+    }
+  }
+
   if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
     throw new Error(`Block ${op.blockId} not found or is not a text block`);
   }
@@ -257,25 +294,20 @@ export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
   const newParagraph = createParagraph('');
   newParagraph.children = newChildren;
 
-  // Check if paragraph is inside a list item — if so, create a new list item instead
-  // of a top-level paragraph, and insert it in the list.
+  // Check if paragraph is inside a list item — insert as new list item
   for (const top of doc.children) {
     if (top.type === 'list') {
       const list = top as List;
       for (let i = 0; i < list.children.length; i++) {
         const item = list.children[i];
-        // Check if the split block is inside this list item (the paragraph itself
-        // or any nested list's paragraphs).
         const found = item.id === op.blockId ||
           item.children.some((c) => c.id === op.blockId ||
             (c.type === 'list' && findNode(c, op.blockId)));
         if (found) {
-          // Create a new list item with the overflow paragraph
           const newItem = createListItem([newParagraph]);
           list.children.splice(i + 1, 0, newItem);
           return newParagraph.id;
         }
-        // Check nested lists
         if (item.children.some((c) => c.type === 'list')) {
           for (const child of item.children) {
             if (child.type === 'list') {
@@ -295,7 +327,23 @@ export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
     }
   }
 
-  // Not inside a list — insert as top-level paragraph
+  // Check if paragraph is inside a table cell — insert as new paragraph in the same cell
+  for (const top of doc.children) {
+    if (top.type === 'table') {
+      const table = top as unknown as Table;
+      for (const row of table.rows) {
+        for (const cell of row.cells) {
+          const paraIdx = cell.children.findIndex((p) => p.id === op.blockId);
+          if (paraIdx >= 0) {
+            cell.children.splice(paraIdx + 1, 0, newParagraph);
+            return newParagraph.id;
+          }
+        }
+      }
+    }
+  }
+
+  // Not inside a list or table — insert as top-level paragraph
   const childIndex = doc.children.findIndex((c) => c.id === op.blockId);
   if (childIndex >= 0) {
     doc.children.splice(childIndex + 1, 0, newParagraph);
@@ -724,12 +772,17 @@ export function invertSetStyle(op: SetStyleOp): SetStyleOp {
 
 export function applySetBlockAttrs(doc: DocumentRoot, op: SetBlockAttrsOp): void {
   const block = findNode(doc, op.blockId);
-  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
-    throw new Error(`Block ${op.blockId} not found or is not a text block`);
+  if (!block) {
+    throw new Error(`Block ${op.blockId} not found`);
   }
 
-  const textBlock = block as Paragraph | Heading;
-  textBlock.attrs = { ...(textBlock.attrs || {}), ...op.attrs };
+  if (block.type === 'paragraph' || block.type === 'heading') {
+    const textBlock = block as Paragraph | Heading;
+    textBlock.attrs = { ...(textBlock.attrs || {}), ...op.attrs };
+  } else if (block.type === 'table') {
+    const table = block as unknown as Table;
+    table.attrs = { ...(table.attrs || {}), ...op.attrs };
+  }
 }
 
 export function invertSetBlockAttrs(op: SetBlockAttrsOp): SetBlockAttrsOp {
@@ -1148,6 +1201,23 @@ export function invertMergeTableCells(op: MergeTableCellsOp): MergeTableCellsOp 
   // We don't track the original state, so this is a limitation
   // For now, we'll just return the same op (no-op on undo)
   return { ...op };
+}
+
+// ============================================================
+// ResizeColumn Operation
+// ============================================================
+
+export function applyResizeColumn(doc: DocumentRoot, op: ResizeColumnOp): void {
+  const block = findNode(doc, op.blockId);
+  if (!block || block.type !== 'table') return;
+  const table = block as unknown as Table;
+  if (op.columnIndex >= 0 && op.columnIndex < table.columnWidths.length) {
+    table.columnWidths[op.columnIndex] = op.width;
+  }
+}
+
+export function invertResizeColumn(op: ResizeColumnOp): ResizeColumnOp {
+  return { ...op, width: op.prevWidth, prevWidth: op.width };
 }
 
 // ============================================================
