@@ -281,6 +281,57 @@ class PDFExporter:
         except Exception:
             return [Paragraph(f"[Image: {src}]", self.styles['Normal'])]
     
+    def _cell_to_paragraph(self, cell: Dict[str, Any]) -> Paragraph:
+        """Convert a table cell's content into a ReportLab Paragraph with markup."""
+        align_map = {'left': TA_LEFT, 'center': TA_CENTER, 'right': TA_RIGHT}
+        children = cell.get("children", [])
+        
+        # Determine alignment from first paragraph that has it
+        align_val = TA_LEFT
+        for p in children:
+            p_attrs = p.get("attrs") or {}
+            if p_attrs.get("textAlign"):
+                align_val = align_map.get(p_attrs["textAlign"], TA_LEFT)
+                break
+        
+        # Build XML-style markup for runs
+        parts = []
+        for p in children:
+            runs = p.get("children", [])
+            for run in runs:
+                content = run.get("content", "")
+                marks = run.get("marks", [])
+                # Wrap in formatting tags
+                text = content
+                if 'bold' in marks:
+                    text = f'<b>{text}</b>'
+                if 'italic' in marks:
+                    text = f'<i>{text}</i>'
+                if 'underline' in marks:
+                    text = f'<u>{text}</u>'
+                if 'strikethrough' in marks:
+                    text = f'<strike>{text}</strike>'
+                parts.append(text)
+            # Add newline between paragraphs
+            parts.append('<br/>')
+        
+        body = ''.join(parts)
+        if body.endswith('<br/>'):
+            body = body[:-5]
+        if not body:
+            body = ' '
+        
+        style = ParagraphStyle(
+            'CellPara',
+            fontName='Helvetica',
+            fontSize=10,
+            leading=14,
+            alignment=align_val,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+        return Paragraph(body, style)
+    
     def _process_table(self, block: Dict[str, Any]) -> List:
         """Process table block."""
         rows = block.get("rows", [])
@@ -288,36 +339,7 @@ class PDFExporter:
         if not rows:
             return []
         
-        # Convert to ReportLab table format, tracking per-cell alignment
-        align_map = {'left': 'LEFT', 'center': 'CENTER', 'right': 'RIGHT'}
-        table_data = []
-        cell_alignments = []  # (row_index, col_index, 'LEFT'|'CENTER'|'RIGHT')
-        
-        for ri, row in enumerate(rows):
-            row_data = []
-            for ci, cell in enumerate(row.get("cells", [])):
-                if cell.get("colSpan", 1) > 0:
-                    text = self._extract_text(cell)
-                    row_data.append(text)
-                    # Check paragraph-level alignment
-                    children = cell.get("children", [])
-                    align = None
-                    for p in children:
-                        p_attrs = p.get("attrs") or {}
-                        if p_attrs.get("textAlign"):
-                            align = align_map.get(p_attrs["textAlign"], "LEFT")
-                            break
-                    if align:
-                        cell_alignments.append((ri, ci, align))
-            if row_data:
-                table_data.append(row_data)
-        
-        if not table_data:
-            return []
-        
-        # Column widths from the frontend are in CSS pixels (96 DPI).
-        # Convert to ReportLab points (72 DPI): px * 72/96 = px * 0.75.
-        # Then scale to fit within the page content area if needed.
+        # Convert column widths from px to pt
         content_width = self._page_width - self._left_margin - self._right_margin
         raw_widths = [float(w) * 0.75 for w in column_widths] if column_widths else None
         if raw_widths:
@@ -329,8 +351,23 @@ class PDFExporter:
                 col_widths = raw_widths
         
         # Determine table alignment from block attrs
+        align_map = {'left': 'LEFT', 'center': 'CENTER', 'right': 'RIGHT'}
         attrs = block.get("attrs", {}) or {}
         h_align = align_map.get(attrs.get("textAlign", "left"), 'LEFT')
+        
+        # Build table data with Paragraph objects (supports bold/italic markup)
+        table_data = []
+        for ri, row in enumerate(rows):
+            row_data = []
+            for ci, cell in enumerate(row.get("cells", [])):
+                if cell.get("colSpan", 1) > 0:
+                    para = self._cell_to_paragraph(cell)
+                    row_data.append(para)
+            if row_data:
+                table_data.append(row_data)
+        
+        if not table_data:
+            return []
         
         # Create table with explicit column widths
         table = Table(table_data, colWidths=col_widths, hAlign=h_align)
@@ -352,14 +389,6 @@ class PDFExporter:
             ('LEFTPADDING', (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
         ]
-        
-        # Apply per-cell alignment overrides
-        for ri, ci, al in cell_alignments:
-            # Account for header row offset: rows[0] is the header at (0, 0)
-            # ci may need adjustment for colspan/rowspan, but for simple cases
-            # the col index in row.cells matches the column position.
-            if ri < len(table_data) and ci < len(table_data[ri]):
-                style_cmds.append(('ALIGN', (ci, ri), (ci, ri), al))
         
         style = TableStyle(style_cmds)
         table.setStyle(style)

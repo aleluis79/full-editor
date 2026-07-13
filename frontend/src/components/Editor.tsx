@@ -118,10 +118,9 @@ export function Editor({ onBack }: EditorProps) {
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragState.current) return;
 
-      // Clear any browser-initiated DOM selection that might interfere
-      // with our JS-based selection rendering.
-      const sel = window.getSelection();
-      if (sel && !sel.isCollapsed) sel.removeAllRanges();
+      // Clear native selection so only our custom JS selection is visible
+      const nativeSel = window.getSelection();
+      if (nativeSel && !nativeSel.isCollapsed) nativeSel.removeAllRanges();
 
       const hit = hitTest(e.clientX, e.clientY);
       if (!hit) return;
@@ -1092,14 +1091,11 @@ export function Editor({ onBack }: EditorProps) {
       const sel = window.getSelection();
       if (!sel) return;
 
-      // Ignore selections outside the editor blocks
       const anchorPos = sel.anchorNode
         ? nodeToLogicalPosition(sel.anchorNode, sel.anchorOffset)
         : null;
       if (!anchorPos) return;
 
-      // Clamp to document model — the DOM may have \u200B placeholders
-      // that inflate offsets beyond the actual text content.
       const doc = useDocumentStore.getState().document;
       const clampedAnchor = clampCursor(doc, { position: anchorPos }).position;
 
@@ -1115,6 +1111,8 @@ export function Editor({ onBack }: EditorProps) {
         const clampedFocus = clampCursor(doc, { position: focusPos }).position;
         setSelection({ anchor: clampedAnchor, focus: clampedFocus });
         setCursorPosition(clampedFocus);
+
+        sel.removeAllRanges();
       }
     };
 

@@ -339,6 +339,7 @@ function renderBlock(
         onBlockClick={onBlockClick}
         onDoubleClick={onDoubleClick}
         onTripleClick={onTripleClick}
+        onBlockMouseDown={onBlockMouseDown}
       />
     );
   }

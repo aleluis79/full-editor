@@ -2,6 +2,8 @@ import { useRef, useLayoutEffect, useState } from 'react';
 import type { Table as TableType, TableRow as TableRowType, TableCell as TableCellType } from '../core/types';
 import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
+import { isSelectionEmpty } from '../core/selection';
+import { getBlockNodes } from '../core/document';
 
 type BlockClickHandler = (blockId: string, clientX: number, clientY: number) => void;
 
@@ -11,9 +13,10 @@ interface TableBlockProps {
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
+  onBlockMouseDown?: (blockId: string, e: React.MouseEvent) => void;
 }
 
-export function TableBlock({ block, activeBlockId, onBlockClick, onDoubleClick, onTripleClick }: TableBlockProps) {
+export function TableBlock({ block, activeBlockId, onBlockClick, onDoubleClick, onTripleClick, onBlockMouseDown }: TableBlockProps) {
   const deleteTableRow = useDocumentStore((s) => s.deleteTableRow);
   const addTableRow = useDocumentStore((s) => s.addTableRow);
   const addTableColumn = useDocumentStore((s) => s.addTableColumn);
@@ -114,6 +117,7 @@ export function TableBlock({ block, activeBlockId, onBlockClick, onDoubleClick, 
                 onBlockClick={onBlockClick}
                 onDoubleClick={onDoubleClick}
                 onTripleClick={onTripleClick}
+                onBlockMouseDown={onBlockMouseDown}
                 isHeader={true}
               >
                 {isEditing && (
@@ -148,6 +152,7 @@ export function TableBlock({ block, activeBlockId, onBlockClick, onDoubleClick, 
               onBlockClick={onBlockClick}
               onDoubleClick={onDoubleClick}
               onTripleClick={onTripleClick}
+              onBlockMouseDown={onBlockMouseDown}
               onDeleteRow={handleDeleteRow}
               onAddRow={handleAddRow}
               editing={isEditing}
@@ -180,6 +185,7 @@ interface TableRowComponentProps {
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
+  onBlockMouseDown?: (blockId: string, e: React.MouseEvent) => void;
   onDeleteRow: (rowIndex: number) => void;
   onAddRow: (afterRowIndex: number) => void;
   editing: boolean;
@@ -193,10 +199,10 @@ function TableRowComponent({
   onBlockClick,
   onDoubleClick,
   onTripleClick,
+  onBlockMouseDown,
   onDeleteRow,
   onAddRow,
   editing,
-  isLastRow,
 }: TableRowComponentProps) {
   return (
     <tr className="table-row">
@@ -216,6 +222,7 @@ function TableRowComponent({
             onBlockClick={onBlockClick}
             onDoubleClick={onDoubleClick}
             onTripleClick={onTripleClick}
+            onBlockMouseDown={onBlockMouseDown}
           />
         );
       })}
@@ -249,6 +256,7 @@ interface TableCellComponentProps {
   onBlockClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
+  onBlockMouseDown?: (blockId: string, e: React.MouseEvent) => void;
   isHeader?: boolean;
   children?: React.ReactNode;
 }
@@ -261,6 +269,7 @@ function TableCellComponent({
   onBlockClick,
   onDoubleClick,
   onTripleClick,
+  onBlockMouseDown,
   isHeader,
   children,
 }: TableCellComponentProps) {
@@ -290,6 +299,7 @@ function TableCellComponent({
             onClick={onBlockClick}
             onDoubleClick={onDoubleClick}
             onTripleClick={onTripleClick}
+            onMouseDown={onBlockMouseDown ? (e: React.MouseEvent) => onBlockMouseDown(paragraph.id, e) : undefined}
           />
         );
       })}
@@ -305,6 +315,7 @@ interface TableCellParagraphProps {
   onClick: BlockClickHandler;
   onDoubleClick: BlockClickHandler;
   onTripleClick: BlockClickHandler;
+  onMouseDown?: (e: React.MouseEvent) => void;
 }
 
 function TableCellParagraph({
@@ -314,9 +325,47 @@ function TableCellParagraph({
   onClick,
   onDoubleClick,
   onTripleClick,
+  onMouseDown,
 }: TableCellParagraphProps) {
   const paraRef = useRef<HTMLDivElement>(null);
   const [cursorRect, setCursorRect] = useState<{ x: number; y: number; height: number } | null>(null);
+  const selection = useEditorStore((s) => s.selection);
+
+  // ── Compute selection range within this paragraph ──────────
+  const getBlockSelRange = (): [number, number] | null => {
+    if (!selection || isSelectionEmpty(selection)) return null;
+    const inBlock = (id: string) => id === paragraph.id;
+    const aIn = inBlock(selection.anchor.nodeId);
+    const fIn = inBlock(selection.focus.nodeId);
+    const blockLen = paragraph.children.reduce((s, r) => s + r.content.length, 0);
+
+    if (aIn && fIn) {
+      return [Math.min(selection.anchor.offset, selection.focus.offset),
+              Math.max(selection.anchor.offset, selection.focus.offset)];
+    }
+
+    // Multi-block selection: determine document order to handle backward selections
+    const doc = useDocumentStore.getState().document;
+    const allBlocks = getBlockNodes(doc);
+    const anchorIdx = allBlocks.findIndex((b) => b.id === selection.anchor.nodeId);
+    const focusIdx = allBlocks.findIndex((b) => b.id === selection.focus.nodeId);
+    const isForward = anchorIdx >= 0 && focusIdx >= 0 && anchorIdx <= focusIdx;
+
+    if (aIn) {
+      return isForward ? [selection.anchor.offset, blockLen] : [0, selection.anchor.offset];
+    }
+    if (fIn) {
+      return isForward ? [0, selection.focus.offset] : [selection.focus.offset, blockLen];
+    }
+
+    // Middle block: entire block is selected
+    const thisIdx = allBlocks.findIndex((b) => b.id === paragraph.id);
+    if (anchorIdx >= 0 && focusIdx >= 0 && thisIdx >= 0 &&
+        thisIdx > Math.min(anchorIdx, focusIdx) && thisIdx < Math.max(anchorIdx, focusIdx)) {
+      return [0, blockLen];
+    }
+    return null;
+  };
 
   // Measure cursor position via Range API
   useLayoutEffect(() => {
@@ -350,7 +399,6 @@ function TableCellParagraph({
       charIndex += nodeLen;
     }
 
-    // Offset beyond all text
     const lastChild = el.lastChild;
     if (lastChild) {
       const range = document.createRange();
@@ -368,6 +416,69 @@ function TableCellParagraph({
     }
   }, [cursorOffset, isCursorHere]);
 
+  // ── Render text with selection highlighting ────────────────
+  const renderTextContent = () => {
+    if (!paragraph.children || paragraph.children.length === 0) {
+      return <span className="text-run" data-empty="true">{'\u200B'}</span>;
+    }
+
+    const selRange = getBlockSelRange();
+    const SEL_BG = 'rgba(0, 120, 215, 0.3)';
+    const parts: React.ReactNode[] = [];
+    let globalOffset = 0;
+
+    paragraph.children.forEach((run, index) => {
+      const runLen = run.content.length;
+      const runStart = globalOffset;
+      const runEnd = runStart + runLen;
+
+      const baseStyle: React.CSSProperties = {};
+      if (run.marks.includes('bold')) baseStyle.fontWeight = 'bold';
+      if (run.marks.includes('italic')) baseStyle.fontStyle = 'italic';
+      if (run.marks.includes('underline')) baseStyle.textDecoration = 'underline';
+      if (run.marks.includes('strikethrough')) baseStyle.textDecoration = 'line-through';
+      if (run.attrs?.fontFamily) baseStyle.fontFamily = run.attrs.fontFamily as string;
+      if (run.attrs?.fontSize) baseStyle.fontSize = run.attrs.fontSize as number;
+      if (run.attrs?.color) baseStyle.color = run.attrs.color as string;
+      if (run.attrs?.backgroundColor) baseStyle.backgroundColor = run.attrs.backgroundColor as string;
+
+      const content = run.content || '\u200B';
+
+      if (!selRange || runEnd <= selRange[0] || runStart >= selRange[1]) {
+        parts.push(
+          <span key={run.id || index} className="text-run" style={baseStyle}>
+            {content}
+          </span>
+        );
+      } else {
+        const selStart = Math.max(0, selRange[0] - runStart);
+        const selEnd = Math.min(runLen, selRange[1] - runStart);
+        if (selStart > 0) {
+          parts.push(
+            <span key={`${run.id || index}-pre`} className="text-run" style={baseStyle}>
+              {content.slice(0, selStart)}
+            </span>
+          );
+        }
+        parts.push(
+          <span key={`${run.id || index}-sel`} className="text-run" style={{ ...baseStyle, backgroundColor: SEL_BG }}>
+            {content.slice(selStart, selEnd)}
+          </span>
+        );
+        if (selEnd < runLen) {
+          parts.push(
+            <span key={`${run.id || index}-post`} className="text-run" style={baseStyle}>
+              {content.slice(selEnd)}
+            </span>
+          );
+        }
+      }
+      globalOffset += runLen;
+    });
+
+    return <>{parts}</>;
+  };
+
   return (
     <div
       ref={paraRef}
@@ -379,6 +490,7 @@ function TableCellParagraph({
         wordBreak: 'break-word',
         textAlign: paragraph.attrs?.textAlign ?? 'left',
       }}
+      onMouseDown={onMouseDown}
       onClick={(e) => onClick(paragraph.id, e.clientX, e.clientY)}
       onDoubleClick={(e) => onDoubleClick(paragraph.id, e.clientX, e.clientY)}
       onMouseUp={(e) => {
@@ -387,21 +499,7 @@ function TableCellParagraph({
         }
       }}
     >
-      {paragraph.children.map((run) => (
-        <span
-          key={run.id}
-          style={{
-            fontWeight: run.marks.includes('bold') ? 'bold' : 'normal',
-            fontStyle: run.marks.includes('italic') ? 'italic' : 'normal',
-            fontFamily: run.attrs?.fontFamily,
-            fontSize: run.attrs?.fontSize,
-            color: run.attrs?.color,
-          }}
-        >
-          {run.content || '\u200B'}
-        </span>
-      ))}
-      {paragraph.children.length === 0 && <br />}
+      {renderTextContent()}
 
       {isCursorHere && (
         <span
