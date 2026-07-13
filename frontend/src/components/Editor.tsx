@@ -23,6 +23,7 @@ interface EditorProps {
 
 export function Editor({ onBack }: EditorProps) {
   const doc = useDocumentStore((s) => s.document);
+  const saveDocument = useDocumentStore((s) => s.saveDocument);
   const insertText = useDocumentStore((s) => s.insertText);
   const deleteText = useDocumentStore((s) => s.deleteText);
   const splitBlock = useDocumentStore((s) => s.splitBlock);
@@ -801,6 +802,24 @@ export function Editor({ onBack }: EditorProps) {
           break;
         }
 
+        case 's': {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            saveDocument().catch(() => {});
+          } else {
+            e.preventDefault();
+            if (hasSelection) {
+              const result = replaceSelection(selection!, e.key);
+              setCursorPosition(result.newCursorPosition);
+              clearSelection();
+            } else {
+              insertText(nodeId, offset, e.key);
+              setCursorPosition({ nodeId, offset: offset + 1 });
+            }
+          }
+          break;
+        }
+
         case 'Tab': {
           e.preventDefault();
           const indent = '    '; // 4 spaces
@@ -833,7 +852,7 @@ export function Editor({ onBack }: EditorProps) {
     },
     [
       cursor, doc, selection,
-      insertText, deleteText, splitBlock, mergeBlocks,
+      saveDocument, insertText, deleteText, splitBlock, mergeBlocks,
       deleteSelection, replaceSelection, toggleMark,
       undo, redo,
       setCursorPosition, setSelection, clearSelection, extendSelection,
