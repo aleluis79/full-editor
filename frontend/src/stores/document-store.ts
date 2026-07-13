@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, ResizeColumnOp, Selection, Paragraph, Heading, List, ListItem, BlockNode, Table } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, DeleteBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, ResizeColumnOp, Selection, Paragraph, Heading, List, ListItem, BlockNode, Table } from '../core/types';
 import {
   createDocument,
   createParagraph,
@@ -34,6 +34,7 @@ import {
   applyDeleteTableColumn,
   applyMergeTableCells,
   applyResizeColumn,
+  applyDeleteBlock,
   invertOperation,
   applyOperation,
 } from '../core/operations';
@@ -114,6 +115,7 @@ interface DocumentState {
   deleteTableColumn: (tableId: NodeId, columnIndex: number) => void;
   mergeTableCells: (tableId: NodeId, startRow: number, startCol: number, endRow: number, endCol: number) => void;
   resizeColumn: (tableId: NodeId, columnIndex: number, width: number) => void;
+  deleteBlock: (blockId: NodeId) => void;
   undo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
   redo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
   getBlockText: (blockId: string) => string;
@@ -1756,6 +1758,41 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       forward: [op],
       inverse: [invertOperation(op)],
       description: 'Resize column',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  deleteBlock: (blockId) => {
+    const { document, history, historyIndex } = get();
+    const block = document.children.find((c) => c.id === blockId);
+    if (!block) return;
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const op: DeleteBlockOp = {
+      type: 'deleteBlock',
+      blockId,
+      block: JSON.parse(JSON.stringify(block)),
+      afterBlockId: null,
+    };
+
+    applyDeleteBlock(docClone, op);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [op],
+      inverse: [invertOperation(op)],
+      description: 'Delete block',
     };
 
     const newHistory = history.slice(0, historyIndex + 1);

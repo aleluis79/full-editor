@@ -61,9 +61,11 @@ export function Editor({ onBack }: EditorProps) {
   const convertBlock = useDocumentStore((s) => s.convertBlock);
   const appendBlockToList = useDocumentStore((s) => s.appendBlockToList);
   const prependListToBlock = useDocumentStore((s) => s.prependListToBlock);
+  const deleteBlock = useDocumentStore((s) => s.deleteBlock);
 
   const cursor = useEditorStore((s) => s.cursor);
   const focused = useEditorStore((s) => s.focused);
+  const selectedTableId = useEditorStore((s) => s.selectedTableId);
   const selection = useEditorStore((s) => s.selection);
   const setCursorPosition = useEditorStore((s) => s.setCursorPosition);
   const setSelection = useEditorStore((s) => s.setSelection);
@@ -368,7 +370,46 @@ export function Editor({ onBack }: EditorProps) {
               }
             }
           } else {
+            const cursorBefore = { nodeId: cursor.position.nodeId, offset: cursor.position.offset };
             moveCursorVisualLine('down');
+            // Check if we need to exit the table at the bottom
+            const currentTableCtx = findTableCellContext(
+              useDocumentStore.getState().document,
+              cursorBefore.nodeId,
+            );
+            const newTableCtx = findTableCellContext(
+              useDocumentStore.getState().document,
+              cursor.position.nodeId,
+            );
+            if (currentTableCtx && currentTableCtx.rowIndex === currentTableCtx.table.rows.length - 1) {
+              const stuckInTable = newTableCtx && newTableCtx.table.id === currentTableCtx.table.id
+                && (cursor.position.nodeId === cursorBefore.nodeId
+                    || newTableCtx.rowIndex <= currentTableCtx.rowIndex);
+              const wentNowhere = cursor.position.nodeId === cursorBefore.nodeId
+                && cursor.position.offset === cursorBefore.offset;
+              if (stuckInTable || wentNowhere) {
+                // Look for an existing paragraph after the table
+                const doc = useDocumentStore.getState().document;
+                const tableIdx = doc.children.findIndex((c) => c.id === currentTableCtx.table.id);
+                let nextParaId: string | null = null;
+                if (tableIdx >= 0 && tableIdx < doc.children.length - 1) {
+                  const next = doc.children[tableIdx + 1];
+                  if (next.type === 'paragraph' || next.type === 'heading') {
+                    nextParaId = next.id;
+                  }
+                }
+                if (nextParaId) {
+                  setCursorPosition({ nodeId: nextParaId, offset: 0 });
+                  clearSelection();
+                } else {
+                  const newParaId = insertBlock(currentTableCtx.table.id, 'paragraph');
+                  if (newParaId) {
+                    setCursorPosition({ nodeId: newParaId, offset: 0 });
+                    clearSelection();
+                  }
+                }
+              }
+            }
           }
           break;
         }
@@ -487,13 +528,48 @@ export function Editor({ onBack }: EditorProps) {
           break;
         }
 
-        case 'Backspace': {
+        case 'Backspace':
+        case 'Delete': {
           e.preventDefault();
+
           if (hasSelection) {
             const result = deleteSelection(selection!);
             setCursorPosition(result.newCursorPosition);
             clearSelection();
-          } else if (offset === 0) {
+            break;
+          }
+
+          if (e.key === 'Delete') {
+            // Original Delete key logic
+            const block = findNode(doc, nodeId);
+            const blockEnd = block && (block.type === 'paragraph' || block.type === 'heading')
+              ? getBlockText(block).length : 0;
+            if (offset >= blockEnd) {
+              const result = mergeBlocks(nodeId);
+              if (result) {
+                setCursorPosition(result.newCursorPosition);
+                clearSelection();
+              } else {
+                const nextBlock = getNextBlock(doc, nodeId);
+                if (nextBlock) {
+                  if (nextBlock.type === 'list') {
+                    prependListToBlock(nodeId, nextBlock.id);
+                  } else {
+                    const nextListCtx = findListContext(doc, nextBlock.id);
+                    if (nextListCtx) {
+                      prependListToBlock(nodeId, nextListCtx.list.id);
+                    }
+                  }
+                }
+              }
+            } else {
+              deleteText(nodeId, offset, 'forward');
+            }
+            break;
+          }
+
+          // Backspace key logic
+          if (offset === 0) {
             // Check if we're at the start of a paragraph inside a table cell
             const tableCtx = findTableCellContext(doc, nodeId);
             if (tableCtx) {
@@ -600,45 +676,6 @@ export function Editor({ onBack }: EditorProps) {
               position: { nodeId, offset: newOffset },
             });
             setCursorPosition(clamped.position);
-          }
-          break;
-        }
-
-        case 'Delete': {
-          e.preventDefault();
-          if (hasSelection) {
-            const result = deleteSelection(selection!);
-            setCursorPosition(result.newCursorPosition);
-            clearSelection();
-          } else {
-            const block = findNode(doc, nodeId);
-            const blockEnd = block && (block.type === 'paragraph' || block.type === 'heading')
-              ? getBlockText(block).length : 0;
-            if (offset >= blockEnd) {
-              // At end of block → merge with next block
-              const result = mergeBlocks(nodeId);
-              if (result) {
-                setCursorPosition(result.newCursorPosition);
-                clearSelection();
-              } else {
-                // mergeBlocks may fail if the next block is a list (or inside one).
-                // Check and prepend the list's first item into this block.
-                const nextBlock = getNextBlock(doc, nodeId);
-                if (nextBlock) {
-                  if (nextBlock.type === 'list') {
-                    // Next block IS a list → prepend its first item
-                    prependListToBlock(nodeId, nextBlock.id);
-                  } else {
-                    const nextListCtx = findListContext(doc, nextBlock.id);
-                    if (nextListCtx) {
-                      prependListToBlock(nodeId, nextListCtx.list.id);
-                    }
-                  }
-                }
-              }
-            } else {
-              deleteText(nodeId, offset, 'forward');
-            }
           }
           break;
         }
@@ -965,7 +1002,7 @@ export function Editor({ onBack }: EditorProps) {
     },
     [
       cursor, doc, selection,
-      saveDocument, insertBlock, insertText, deleteText, splitBlock, mergeBlocks,
+      saveDocument, insertBlock, deleteBlock, insertText, deleteText, splitBlock, mergeBlocks,
       deleteSelection, replaceSelection, toggleMark,
       undo, redo,
       setCursorPosition, setSelection, clearSelection, extendSelection,
@@ -979,6 +1016,29 @@ export function Editor({ onBack }: EditorProps) {
       setCursorPosition({ nodeId: blocks[0].id, offset: 0 });
     }
   }, [blocks, cursor.position.nodeId, setCursorPosition]);
+
+  // When a table is selected, listen for Delete/Backspace on the document
+  // to delete the entire table, regardless of textarea focus.
+  useEffect(() => {
+    if (!selectedTableId) return;
+
+    const handleTableDelete = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        e.stopPropagation();
+        useEditorStore.getState().selectTable(null);
+        const state = useDocumentStore.getState();
+        const clone = JSON.parse(JSON.stringify(state.document));
+        const idx = clone.children.findIndex((c: any) => c.id === selectedTableId);
+        if (idx >= 0) {
+          clone.children.splice(idx, 1);
+          useDocumentStore.setState({ document: clone, isDirty: true });
+        }
+      }
+    };
+    document.addEventListener('keydown', handleTableDelete, true);
+    return () => document.removeEventListener('keydown', handleTableDelete, true);
+  }, [selectedTableId]);
 
   // Calculate layout when document changes (main thread for reliability)
   useEffect(() => {
