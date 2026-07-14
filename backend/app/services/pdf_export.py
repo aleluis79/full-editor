@@ -13,6 +13,7 @@ from reportlab.platypus import (
     PageBreak,
 )
 from reportlab.lib import colors
+from pathlib import Path
 from typing import Dict, Any, List
 import io
 
@@ -269,14 +270,25 @@ class PDFExporter:
         width = block.get("width", 300)
         height = block.get("height", 200)
         
-        # Scale to fit page
-        max_width = 400
-        scale = min(1, max_width / width)
-        width = width * scale
-        height = height * scale
+        # Map URL path to filesystem path if it's a local upload
+        if src.startswith("/uploads/"):
+            from ..config import UPLOAD_DIR as _UPLOAD_DIR
+            filename = Path(src).name
+            src = str(_UPLOAD_DIR / filename)
+        
+        # Scale to fit page content width, preserving aspect ratio
+        content_width = self._page_width - self._left_margin - self._right_margin
+        scale = min(1, content_width / width) if width > 0 else 1
+        scaled_w = width * scale
+        scaled_h = height * scale
+        
+        # Resolve alignment from block attrs
+        attrs = block.get("attrs") or {}
+        align_map = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}
+        h_align = align_map.get(attrs.get("textAlign", "left"), "LEFT")
         
         try:
-            img = Image(src, width=width, height=height)
+            img = Image(src, width=scaled_w, height=scaled_h, hAlign=h_align)
             return [img]
         except Exception:
             return [Paragraph(f"[Image: {src}]", self.styles['Normal'])]

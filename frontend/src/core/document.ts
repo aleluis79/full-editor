@@ -16,6 +16,7 @@ import type {
   NodeId,
   MarkType,
   StyleAttrs,
+  BlockAttrs,
 } from './types';
 import { hasChildren } from './types';
 
@@ -134,7 +135,8 @@ export function createImage(
   alt: string = '',
   width: number = 300,
   height: number = 200,
-  inline: boolean = false
+  inline: boolean = false,
+  attrs?: BlockAttrs,
 ): Image {
   return {
     id: createId(),
@@ -144,6 +146,7 @@ export function createImage(
     width,
     height,
     inline,
+    attrs,
   };
 }
 

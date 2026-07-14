@@ -103,6 +103,8 @@ export interface Image extends BaseNode {
   height: number;
   /** Inline image sits within text flow, block image takes full width */
   inline: boolean;
+  /** Block-level attributes (alignment, etc.) */
+  attrs?: BlockAttrs;
 }
 
 /** Table cell */

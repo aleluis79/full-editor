@@ -57,6 +57,7 @@ export function Editor({ onBack }: EditorProps) {
   const removeLink = useDocumentStore((s) => s.removeLink);
   const undo = useDocumentStore((s) => s.undo);
   const redo = useDocumentStore((s) => s.redo);
+  const uploadAndInsertImage = useDocumentStore((s) => s.uploadAndInsertImage);
   const mergeBlocks = useDocumentStore((s) => s.mergeBlocks);
   const removeListItem = useDocumentStore((s) => s.removeListItem);
   const exitList = useDocumentStore((s) => s.exitList);
@@ -324,6 +325,18 @@ export function Editor({ onBack }: EditorProps) {
 
         case 'ArrowUp': {
           e.preventDefault();
+          // ── Image block: move to previous block ──────────────
+          const activeBlock = findNode(doc, cursor.position.nodeId);
+          if (activeBlock?.type === 'image') {
+            const prevBlock = getPreviousBlock(doc, cursor.position.nodeId);
+            if (prevBlock) {
+              const offset = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+                ? getBlockText(prevBlock as any).length : 0;
+              setCursorPosition({ nodeId: prevBlock.id, offset });
+              clearSelection();
+            }
+            break;
+          }
           if (e.shiftKey) {
             // Extend selection up
             const { nodeId, offset } = cursor.position;
@@ -352,6 +365,16 @@ export function Editor({ onBack }: EditorProps) {
 
         case 'ArrowDown': {
           e.preventDefault();
+          // ── Image block: move to next block ──────────────────
+          const activeBlockDown = findNode(doc, cursor.position.nodeId);
+          if (activeBlockDown?.type === 'image') {
+            const nextBlock = getNextBlock(doc, cursor.position.nodeId);
+            if (nextBlock) {
+              setCursorPosition({ nodeId: nextBlock.id, offset: 0 });
+              clearSelection();
+            }
+            break;
+          }
           if (e.shiftKey) {
             // Extend selection down
             const { nodeId, offset } = cursor.position;
@@ -542,6 +565,27 @@ export function Editor({ onBack }: EditorProps) {
             break;
           }
 
+          // ── Image block: delete it ────────────────────────────
+          const currentBlock = findNode(doc, nodeId);
+          if (currentBlock?.type === 'image') {
+            const prevBlock = getPreviousBlock(doc, nodeId);
+            const nextBlock = getNextBlock(doc, nodeId);
+            deleteBlock(nodeId);
+            if (e.key === 'Backspace' && prevBlock) {
+              const prevOffset = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+                ? getBlockText(prevBlock as any).length : 0;
+              setCursorPosition({ nodeId: prevBlock.id, offset: prevOffset });
+            } else if (nextBlock) {
+              setCursorPosition({ nodeId: nextBlock.id, offset: 0 });
+            } else if (prevBlock) {
+              const prevOffset = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+                ? getBlockText(prevBlock as any).length : 0;
+              setCursorPosition({ nodeId: prevBlock.id, offset: prevOffset });
+            }
+            clearSelection();
+            break;
+          }
+
           if (e.key === 'Delete') {
             // Original Delete key logic
             const block = findNode(doc, nodeId);
@@ -695,6 +739,16 @@ export function Editor({ onBack }: EditorProps) {
             const block = findNode(freshDoc, nodeId);
             const text = block && (block.type === 'paragraph' || block.type === 'heading')
               ? getBlockText(block as any) : '';
+
+            // ── Image block: insert paragraph after ────────────
+            if (block?.type === 'image') {
+              const newParaId = insertBlock(nodeId, 'paragraph');
+              if (newParaId) {
+                setCursorPosition({ nodeId: newParaId, offset: 0 });
+                clearSelection();
+              }
+              break;
+            }
 
             // Check if cursor is on a paragraph inside a list
             const listCtx = findListContext(freshDoc, nodeId);
@@ -1073,14 +1127,25 @@ export function Editor({ onBack }: EditorProps) {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         e.stopPropagation();
+        // Capture surrounding blocks BEFORE deleting
+        const doc = useDocumentStore.getState().document;
+        const nextBlock = getNextBlock(doc, selectedTableId);
+        const prevBlock = getPreviousBlock(doc, selectedTableId);
+
         useEditorStore.getState().selectTable(null);
-        const state = useDocumentStore.getState();
-        const clone = JSON.parse(JSON.stringify(state.document));
-        const idx = clone.children.findIndex((c: any) => c.id === selectedTableId);
-        if (idx >= 0) {
-          clone.children.splice(idx, 1);
-          useDocumentStore.setState({ document: clone, isDirty: true });
+        useDocumentStore.getState().deleteBlock(selectedTableId);
+
+        // Move cursor to the next or previous block
+        if (nextBlock) {
+          useEditorStore.getState().setCursorPosition({ nodeId: nextBlock.id, offset: 0 });
+        } else if (prevBlock) {
+          const prevOffset = (prevBlock.type === 'paragraph' || prevBlock.type === 'heading')
+            ? getBlockText(prevBlock as any).length : 0;
+          useEditorStore.getState().setCursorPosition({ nodeId: prevBlock.id, offset: prevOffset });
         }
+        useEditorStore.getState().clearSelection();
+        // Re-focus the textarea so keyboard events (Ctrl+Z, etc.) work
+        textareaRef.current?.focus({ preventScroll: true });
       }
     };
     document.addEventListener('keydown', handleTableDelete, true);
@@ -1183,6 +1248,35 @@ export function Editor({ onBack }: EditorProps) {
         onKeyDown={handleKeyDown}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        onPaste={(e) => {
+          const items = e.clipboardData?.items;
+          const files = e.clipboardData?.files;
+
+          // Check clipboardData.files for images
+          if (files && files.length > 0) {
+            const imgFile = Array.from(files).find((f) => f.type.startsWith('image/'));
+            if (imgFile) {
+              e.preventDefault();
+              uploadAndInsertImage(imgFile).catch((err: Error) => alert(err.message));
+              return;
+            }
+          }
+
+          // Check clipboardData.items (Chromium) for images
+          if (items && items.length > 0) {
+            for (const item of Array.from(items)) {
+              if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const blob = item.getAsFile();
+                if (blob) {
+                  uploadAndInsertImage(blob).catch((err: Error) => alert(err.message));
+                  return;
+                }
+              }
+            }
+          }
+          // Fall through — the keydown Ctrl+V handler will handle text paste
+        }}
         onCompositionStart={() => { isComposingRef.current = true; }}
         onCompositionEnd={(e) => {
           isComposingRef.current = false;

@@ -43,6 +43,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const setBlockAttrs = useDocumentStore((s) => s.setBlockAttrs);
   const setBlockAttrsRange = useDocumentStore((s) => s.setBlockAttrsRange);
   const insertTable = useDocumentStore((s) => s.insertTable);
+  const uploadAndInsertImage = useDocumentStore((s) => s.uploadAndInsertImage);
 
   const currentDocId = useDocumentStore((s) => s.currentDocId);
   const documentTitle = useDocumentStore((s) => s.documentTitle);
@@ -91,6 +92,18 @@ export function Toolbar({ onBack }: ToolbarProps) {
       linkInputRef.current?.focus();
     }
   }, [showLinkPopup]);
+
+  // ── Image input ref ────────────────────────────────────────
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      uploadAndInsertImage(selectedFile).catch((err: Error) => alert(err.message));
+    }
+    // Reset so the same file can be selected again
+    e.target.value = '';
+  }, [uploadAndInsertImage]);
 
   // ── Table picker state ─────────────────────────────────────
   const [showTablePicker, setShowTablePicker] = useState(false);
@@ -815,6 +828,26 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <option value="heading2">Heading 2</option>
           <option value="heading3">Heading 3</option>
         </select>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      {/* Image insert */}
+      <div className="toolbar-group">
+        <input
+          type="file"
+          accept="image/*"
+          ref={imageInputRef}
+          style={{ display: 'none' }}
+          onChange={handleImageSelect}
+        />
+        <button
+          className="toolbar-btn"
+          onClick={() => imageInputRef.current?.click()}
+          title="Insert Image"
+        >
+          🖼️
+        </button>
       </div>
 
       <div className="toolbar-separator" />

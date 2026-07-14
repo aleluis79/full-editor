@@ -320,13 +320,22 @@ function renderBlock(
   }
 
   if (block.type === 'image') {
+    const imgBlock = block as Image;
     return (
-      <ImageBlock
+      <div
         key={block.id}
-        block={block as Image}
-        isActive={block.id === activeBlockId}
-        onClick={() => onBlockClick(block.id, 0, 0)}
-      />
+        className="image-block-wrapper"
+        style={{
+          textAlign: imgBlock.attrs?.textAlign ?? 'left',
+        }}
+      >
+        <ImageBlock
+          block={imgBlock}
+          isActive={block.id === activeBlockId}
+          onClick={onBlockClick}
+          onMouseDown={onBlockMouseDown}
+        />
+      </div>
     );
   }
 

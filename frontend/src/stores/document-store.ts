@@ -42,7 +42,7 @@ import {
 } from '../core/operations';
 import { deleteSelection, isSelectionEmpty, getSelectionRange } from '../core/selection';
 import { useEditorStore } from './editor-store';
-import { createDocument as apiCreateDoc, updateDocument as apiUpdateDoc, fetchDocument as apiFetchDoc } from '../api/client';
+import { createDocument as apiCreateDoc, updateDocument as apiUpdateDoc, fetchDocument as apiFetchDoc, uploadImage } from '../api/client';
 import { usePageStore } from './page-store';
 
 // ============================================================
@@ -109,6 +109,7 @@ interface DocumentState {
   appendBlockToList: (blockId: string, listId: string) => void;
   prependListToBlock: (blockId: string, listId: string) => void;
   insertImage: (afterBlockId: NodeId, src: string, alt?: string, width?: number, height?: number, inline?: boolean) => NodeId;
+  uploadAndInsertImage: (file: File) => Promise<string>;
   resizeImage: (blockId: NodeId, width: number, height: number) => void;
   insertTable: (afterBlockId: NodeId, rows: number, cols: number) => NodeId;
   addTableRow: (tableId: NodeId, afterRowIndex: number) => void;
@@ -1494,6 +1495,37 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       : '';
   },
 
+  uploadAndInsertImage: async (file: File) => {
+    // Validate client-side
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error('Only PNG, JPEG, GIF, and WebP images are supported');
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error('Image must be under 10MB');
+    }
+
+    const url = await uploadImage(file);
+    const { cursor } = useEditorStore.getState();
+    const blockId = cursor.position.nodeId;
+    if (blockId) {
+      // Insert image after current block
+      const imageId = get().insertImage(blockId, url);
+      if (imageId) {
+        // Insert a blank paragraph after the image for continued typing
+        const paraId = get().insertBlock(imageId, 'paragraph');
+        // Move cursor to the new paragraph
+        if (paraId) {
+          const ed = useEditorStore.getState();
+          ed.setCursorPosition({ nodeId: paraId, offset: 0 });
+          ed.clearSelection();
+        }
+      }
+      return imageId || '';
+    }
+    throw new Error('No cursor position');
+  },
+
   resizeImage: (blockId, width, height) => {
     const { document, history, historyIndex } = get();
     const docClone = cloneDocument(document);
@@ -1844,16 +1876,20 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
 
   deleteBlock: (blockId) => {
     const { document, history, historyIndex } = get();
-    const block = document.children.find((c) => c.id === blockId);
-    if (!block) return;
+    const blockIndex = document.children.findIndex((c) => c.id === blockId);
+    if (blockIndex < 0) return;
+    const block = document.children[blockIndex];
     const docClone = cloneDocument(document);
     const now = Date.now();
+
+    // Store the previous block's ID so undo can restore at the correct position
+    const prevBlockId = blockIndex > 0 ? document.children[blockIndex - 1].id : null;
 
     const op: DeleteBlockOp = {
       type: 'deleteBlock',
       blockId,
       block: JSON.parse(JSON.stringify(block)),
-      afterBlockId: null,
+      afterBlockId: prevBlockId,
     };
 
     applyDeleteBlock(docClone, op);
@@ -1921,6 +1957,26 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       const targetIdx = listIdx >= 0 ? listIdx : crs.atIndex;
       docClone.children.splice(targetIdx, 1, ...crs.blocks);
       cursorPos = { nodeId: crs.blocks[0]?.id ?? '', offset: 0 };
+    } else if (
+      entry.forward.length === 1 &&
+      entry.forward[0].type === 'deleteBlock'
+    ) {
+      // ── Delete-block: restore the original block from forward op ──
+      const delOp = entry.forward[0] as DeleteBlockOp;
+      const blockData = JSON.parse(JSON.stringify(delOp.block));
+      if (delOp.afterBlockId) {
+        // Insert after the previous block
+        const afterIdx = docClone.children.findIndex((c) => c.id === delOp.afterBlockId);
+        if (afterIdx >= 0) {
+          docClone.children.splice(afterIdx + 1, 0, blockData);
+        } else {
+          docClone.children.push(blockData);
+        }
+      } else {
+        // Block was first — prepend
+        docClone.children.unshift(blockData);
+      }
+      cursorPos = { nodeId: delOp.blockId, offset: 0 };
     } else {
       // ── Operation-based undo ──────────────────────────────────
       for (let i = entry.inverse.length - 1; i >= 0; i--) {

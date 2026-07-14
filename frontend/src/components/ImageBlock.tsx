@@ -6,9 +6,10 @@ interface ImageBlockProps {
   block: ImageType;
   isActive: boolean;
   onClick: (blockId: string, clientX: number, clientY: number) => void;
+  onMouseDown?: (blockId: string, e: React.MouseEvent) => void;
 }
 
-export function ImageBlock({ block, isActive, onClick }: ImageBlockProps) {
+export function ImageBlock({ block, isActive, onClick, onMouseDown }: ImageBlockProps) {
   const [isResizing, setIsResizing] = useState(false);
   const startPos = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const resizeImage = useDocumentStore((s) => s.resizeImage);
@@ -67,15 +68,23 @@ export function ImageBlock({ block, isActive, onClick }: ImageBlockProps) {
     [block.id, block.width, block.height, resizeImage]
   );
 
+  // Compute alignment style
+  const alignStyle: React.CSSProperties =
+    block.attrs?.textAlign === 'center' ? { textAlign: 'center' } :
+    block.attrs?.textAlign === 'right' ? { textAlign: 'right' } :
+    {};
+
   return (
     <div
       className={`image-block ${isActive ? 'active' : ''}`}
       data-block-id={block.id}
       onClick={(e) => onClick(block.id, e.clientX, e.clientY)}
+      onMouseDown={onMouseDown ? (e) => onMouseDown(block.id, e) : undefined}
       style={{
         position: 'relative',
         display: 'inline-block',
         cursor: 'pointer',
+        ...alignStyle,
       }}
     >
       <img

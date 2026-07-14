@@ -882,6 +882,9 @@ export function applySetBlockAttrs(doc: DocumentRoot, op: SetBlockAttrsOp): void
   } else if (block.type === 'table') {
     const table = block as unknown as Table;
     table.attrs = { ...(table.attrs || {}), ...op.attrs };
+  } else if (block.type === 'image') {
+    const image = block as import('./types').Image;
+    image.attrs = { ...(image.attrs || {}), ...op.attrs };
   }
 }
 

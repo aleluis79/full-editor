@@ -93,6 +93,30 @@ export async function deleteDocument(id: string): Promise<void> {
   }
 }
 
+// ── Image Upload ────────────────────────────────────────────────
+
+/**
+ * Upload an image file to the backend and return its URL path.
+ *
+ * POST /api/images/upload as multipart/form-data.
+ * Returns URL string like "/uploads/images/uuid.ext".
+ * Throws on validation or server error.
+ */
+export async function uploadImage(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/images/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Upload failed' }));
+    throw new Error(err.detail || 'Upload failed');
+  }
+  const data = await response.json();
+  return data.url;
+}
+
 // ── PDF Export ──────────────────────────────────────────────────
 
 export interface ExportPDFData {

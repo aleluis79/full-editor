@@ -221,6 +221,15 @@ export class LayoutEngine {
     const width = image.width * scale;
     const height = image.height * scale;
 
+    // Apply alignment
+    let x = 0;
+    const textAlign = image.attrs?.textAlign;
+    if (textAlign === 'center') {
+      x = Math.max(0, (maxWidth - width) / 2);
+    } else if (textAlign === 'right') {
+      x = Math.max(0, maxWidth - width);
+    }
+
     return {
       blockId: image.id,
       blockType: 'image',
@@ -228,7 +237,7 @@ export class LayoutEngine {
       width,
       height,
       y: startY,
-      x: 0,
+      x,
     };
   }
 
