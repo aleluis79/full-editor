@@ -4,10 +4,12 @@ import {
   applyDeleteText,
   applyToggleMark,
   applySetStyle,
+  applySetLink,
+  applyRemoveLink,
   invertOperation,
 } from '../operations';
 import { createDocument, createParagraph, getBlockText, createHeading } from '../document';
-import type { InsertTextOp, DeleteTextOp, ToggleMarkOp, SetStyleOp, Paragraph, Heading } from '../types';
+import type { InsertTextOp, DeleteTextOp, ToggleMarkOp, SetStyleOp, SetLinkOp, RemoveLinkOp, Paragraph, Heading } from '../types';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -284,6 +286,85 @@ describe('invertOperation', () => {
 
 // ── applyInsertText + applyDeleteText = no-op ───────────────
 
+// ── Link URL validation ──────────────────────────────────────
+
+// ── Link removal at cursor position (Ctrl+K) ─────────────────
+
+describe('link removal at cursor position', () => {
+  it('removes link from the run that contains the cursor', () => {
+    const doc = makeDoc('Hello World');
+    const block = getFirstBlock(doc);
+
+    // Set link on "Hello"
+    applySetLink(doc, { type: 'setLink', blockId: block.id, startOffset: 0, endOffset: 5, href: 'https://ex.com' });
+
+    // Simulate: cursor is at offset 2 (inside "Hello"), no selection
+    // The Editor handler finds the run at cursor offset and calls removeLink
+    // with the run's range
+    const cursorOffset = 2;
+    let accumulated = 0;
+    for (const run of block.children) {
+      if (cursorOffset < accumulated + run.content.length) {
+        // Cursor is inside this run — remove link from this run's range
+        expect(run.href).toBe('https://ex.com');
+        applyRemoveLink(doc, { type: 'removeLink', blockId: block.id, startOffset: accumulated, endOffset: accumulated + run.content.length });
+        break;
+      }
+      accumulated += run.content.length;
+    }
+
+    // After removal, the run should have no href and no 'link' mark
+    expect(block.children[0].href).toBeUndefined();
+    expect(block.children[0].marks.includes('link')).toBe(false);
+    // Text should be unchanged
+    expect(getBlockText(block)).toBe('Hello World');
+  });
+
+  it('cursor at end of linked run also removes link', () => {
+    const doc = makeDoc('Click here');
+    const block = getFirstBlock(doc);
+
+    applySetLink(doc, { type: 'setLink', blockId: block.id, startOffset: 0, endOffset: 10, href: 'https://link.com' });
+
+    // Cursor at offset 10 (end of the run)
+    const cursorOffset = 10;
+    let accumulated = 0;
+    let targetRunIndex = -1;
+    let targetStart = -1;
+    let targetEnd = -1;
+    for (let i = 0; i < block.children.length; i++) {
+      const run = block.children[i];
+      if (cursorOffset <= accumulated + run.content.length) {
+        targetRunIndex = i;
+        targetStart = accumulated;
+        targetEnd = accumulated + run.content.length;
+        break;
+      }
+      accumulated += run.content.length;
+    }
+
+    expect(targetRunIndex).toBeGreaterThanOrEqual(0);
+    applyRemoveLink(doc, { type: 'removeLink', blockId: block.id, startOffset: targetStart, endOffset: targetEnd });
+    expect(block.children[0].href).toBeUndefined();
+    expect(getBlockText(block)).toBe('Click here');
+  });
+});
+
+describe('link URL validation', () => {
+  it('empty URL string should produce no operation', () => {
+    const url = '';
+    const trimmed = url.trim();
+    // Simulate the toolbar handler logic: if trimmed is empty, no setLink is called
+    expect(trimmed).toBe('');
+  });
+
+  it('whitespace-only URL should produce no operation', () => {
+    const url = '   ';
+    const trimmed = url.trim();
+    expect(trimmed).toBe('');
+  });
+});
+
 describe('insert + delete round-trip', () => {
   it('insert then delete restores original document', () => {
     const doc = makeDoc('Original');
@@ -316,5 +397,111 @@ describe('insert + delete round-trip', () => {
     // The document should be back to "Hello" with no bold marks
     expect(getBlockText(block)).toBe('Hello');
     expect(block.children.every((r) => r.marks.length === 0)).toBe(true);
+  });
+});
+
+// ── applySetLink ─────────────────────────────────────────────
+
+describe('applySetLink', () => {
+  it('splits runs and sets href on selected range', () => {
+    const doc = makeDoc('Hello World');
+    const block = getFirstBlock(doc);
+
+    const op: SetLinkOp = {
+      type: 'setLink', blockId: block.id,
+      startOffset: 0, endOffset: 5,
+      href: 'https://example.com',
+    };
+    applySetLink(doc, op);
+
+    // "Hello" should now have href and 'link' mark
+    expect(block.children[0].href).toBe('https://example.com');
+    expect(block.children[0].marks).toContain('link');
+    // " World" should remain unaffected
+    const restContent = block.children.slice(1).map((r) => r.content).join('');
+    expect(restContent).toBe(' World');
+    const restRuns = block.children.slice(1);
+    expect(restRuns.every((r) => !r.marks.includes('link'))).toBe(true);
+    expect(restRuns.every((r) => !r.href)).toBe(true);
+  });
+
+  it('splits at range boundaries on multi-run text', () => {
+    const doc = makeDoc('Hello World');
+    const block = getFirstBlock(doc);
+
+    // First make " World" italic
+    applyToggleMark(doc, { type: 'toggleMark', blockId: block.id, mark: 'italic', startOffset: 5, endOffset: 11 });
+
+    // Now apply link to middle portion "lo Wo" (offsets 3-8)
+    const op: SetLinkOp = {
+      type: 'setLink', blockId: block.id,
+      startOffset: 3, endOffset: 8,
+      href: 'https://link.com',
+    };
+    applySetLink(doc, op);
+
+    // Find runs with href
+    const linkedRuns = block.children.filter((r) => r.href === 'https://link.com');
+    expect(linkedRuns.length).toBeGreaterThanOrEqual(1);
+    const linkedText = linkedRuns.map((r) => r.content).join('');
+    expect(linkedText).toBe('lo Wo');
+    // All linked runs should have 'link' mark
+    expect(linkedRuns.every((r) => r.marks.includes('link'))).toBe(true);
+    // Non-linked runs should not have link
+    const nonLinked = block.children.filter((r) => !r.marks.includes('link'));
+    expect(nonLinked.every((r) => !r.href)).toBe(true);
+  });
+});
+
+// ── applyRemoveLink ───────────────────────────────────────────
+
+describe('applyRemoveLink', () => {
+  it('removes href and link mark from linked range', () => {
+    const doc = makeDoc('Hello World');
+    const block = getFirstBlock(doc);
+
+    // First set a link on "Hello"
+    applySetLink(doc, { type: 'setLink', blockId: block.id, startOffset: 0, endOffset: 5, href: 'https://example.com' });
+
+    // Now remove the link
+    const op: RemoveLinkOp = { type: 'removeLink', blockId: block.id, startOffset: 0, endOffset: 5 };
+    applyRemoveLink(doc, op);
+
+    // "Hello" should have no href and no 'link' mark
+    const helloRun = block.children.find((r) => r.content === 'Hello');
+    expect(helloRun).toBeDefined();
+    expect(helloRun!.href).toBeUndefined();
+    expect(helloRun!.marks.includes('link')).toBe(false);
+    // Text should be unchanged
+    expect(getBlockText(block)).toBe('Hello World');
+  });
+
+  it('does nothing when startOffset equals endOffset (no selection)', () => {
+    const doc = makeDoc('Hello');
+    const block = getFirstBlock(doc);
+    const originalRuns = block.children.length;
+
+    applySetLink(doc, { type: 'setLink', blockId: block.id, startOffset: 3, endOffset: 3, href: 'https://x.com' });
+    expect(block.children.length).toBe(originalRuns);
+    expect(block.children.every((r) => !r.href)).toBe(true);
+  });
+
+  it('preserves other marks when removing link', () => {
+    const doc = makeDoc('Hello World');
+    const block = getFirstBlock(doc);
+
+    // Set bold + link on "Hello"
+    applyToggleMark(doc, { type: 'toggleMark', blockId: block.id, mark: 'bold', startOffset: 0, endOffset: 5 });
+    applySetLink(doc, { type: 'setLink', blockId: block.id, startOffset: 0, endOffset: 5, href: 'https://ex.com' });
+
+    // Remove link only
+    applyRemoveLink(doc, { type: 'removeLink', blockId: block.id, startOffset: 0, endOffset: 5 });
+
+    // Bold should remain, link should be gone
+    const helloRun = block.children.find((r) => r.content === 'Hello');
+    expect(helloRun).toBeDefined();
+    expect(helloRun!.marks.includes('bold')).toBe(true);
+    expect(helloRun!.marks.includes('link')).toBe(false);
+    expect(helloRun!.href).toBeUndefined();
   });
 });

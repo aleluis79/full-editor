@@ -353,7 +353,7 @@ export class LayoutEngine {
 
         // Add word to current line
         const runX = currentLineWidth;
-        currentLine.push({
+        const pRun: PositionedRun = {
           text: word,
           x: runX,
           y: 0, // Relative to line
@@ -368,7 +368,11 @@ export class LayoutEngine {
           color: run.attrs?.color ?? '#000000',
           marks: run.marks,
           attrs: run.attrs,
-        });
+        };
+        if (run.href) {
+          pRun.href = run.href;
+        }
+        currentLine.push(pRun);
         currentLineWidth += wordWidth;
       }
     }

@@ -42,14 +42,19 @@ export function cloneDocument(doc: DocumentRoot): DocumentRoot {
 /** Create a text run */
 export function createTextRun(
   content: string,
-  marks: MarkType[] = []
+  marks: MarkType[] = [],
+  href?: string,
 ): TextRun {
-  return {
+  const run: TextRun = {
     id: createId(),
     type: 'text',
     content,
     marks,
   };
+  if (href) {
+    run.href = href;
+  }
+  return run;
 }
 
 /** Create a paragraph with optional initial text */

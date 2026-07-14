@@ -26,6 +26,7 @@ export interface PositionedRun {
   color: string;
   marks: MarkType[];
   attrs?: StyleAttrs;
+  href?: string;
 }
 
 /** A line of text within a block */

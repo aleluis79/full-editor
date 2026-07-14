@@ -429,6 +429,11 @@ class PDFExporter:
                 if "strikethrough" in marks:
                     content = f"<strike>{content}</strike>"
                 
+                # Apply link wrapping (before font attrs so font tags nest inside link)
+                href = child.get("href", "")
+                if "link" in marks and href:
+                    content = f'<a href="{href}">{content}</a>'
+                
                 # Apply background color via ReportLab <span backcolor="...">
                 bg = attrs.get("backgroundColor")
                 if bg and isinstance(bg, str):

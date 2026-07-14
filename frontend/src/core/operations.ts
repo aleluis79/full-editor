@@ -24,6 +24,8 @@ import type {
   InsertImageOp,
   ResizeImageOp,
   InsertTableOp,
+  SetLinkOp,
+  RemoveLinkOp,
   AddTableRowOp,
   AddTableColumnOp,
   DeleteTableRowOp,
@@ -492,6 +494,14 @@ export function applyOperation(doc: DocumentRoot, op: Operation): NodeId | null 
       applyMergeTableCells(doc, op);
       return null;
 
+    case 'setLink':
+      applySetLink(doc, op);
+      return null;
+
+    case 'removeLink':
+      applyRemoveLink(doc, op);
+      return null;
+
     default:
       return null;
   }
@@ -556,6 +566,12 @@ export function invertOperation(op: Operation): Operation {
 
     case 'mergeTableCells':
       return invertMergeTableCells(op);
+
+    case 'setLink':
+      return invertSetLink(op);
+
+    case 'removeLink':
+      return invertRemoveLink(op);
 
     default:
       return op;
@@ -689,6 +705,89 @@ export function invertToggleMark(op: ToggleMarkOp): ToggleMarkOp {
 }
 
 // ============================================================
+// SetLink Operation
+// ============================================================
+
+export function applySetLink(doc: DocumentRoot, op: SetLinkOp): void {
+  const block = findNode(doc, op.blockId);
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    throw new Error(`Block ${op.blockId} not found or is not a text block`);
+  }
+
+  const textBlock = block as Paragraph | Heading;
+
+  // No selection range — nothing to set
+  if (op.startOffset === op.endOffset) return;
+
+  // Split runs so the selection aligns with run boundaries
+  const { startRunIndex, endRunIndex } = splitRunsAtRange(
+    textBlock, op.startOffset, op.endOffset
+  );
+  if (startRunIndex < 0) return;
+
+  // Apply link to the exact runs covering the selection
+  for (let i = startRunIndex; i <= endRunIndex; i++) {
+    const run = textBlock.children[i];
+    run.href = op.href;
+    if (!run.marks.includes('link')) {
+      run.marks.push('link');
+    }
+  }
+}
+
+export function invertSetLink(op: SetLinkOp): RemoveLinkOp {
+  return {
+    type: 'removeLink',
+    blockId: op.blockId,
+    startOffset: op.startOffset,
+    endOffset: op.endOffset,
+  };
+}
+
+// ============================================================
+// RemoveLink Operation
+// ============================================================
+
+export function applyRemoveLink(doc: DocumentRoot, op: RemoveLinkOp): void {
+  const block = findNode(doc, op.blockId);
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    throw new Error(`Block ${op.blockId} not found or is not a text block`);
+  }
+
+  const textBlock = block as Paragraph | Heading;
+
+  // No selection range — nothing to remove
+  if (op.startOffset === op.endOffset) return;
+
+  // Split runs so the selection aligns with run boundaries
+  const { startRunIndex, endRunIndex } = splitRunsAtRange(
+    textBlock, op.startOffset, op.endOffset
+  );
+  if (startRunIndex < 0) return;
+
+  // Remove link from the exact runs covering the selection
+  for (let i = startRunIndex; i <= endRunIndex; i++) {
+    const run = textBlock.children[i];
+    run.href = undefined;
+    run.marks = run.marks.filter((m) => m !== 'link');
+  }
+}
+
+export function invertRemoveLink(op: RemoveLinkOp): SetLinkOp {
+  // The inverse of a removeLink is a setLink with the same range,
+  // but we cannot restore the original href since it was removed.
+  // Return a setLink with an empty href — the undo system should
+  // have the original op stored in the history entry.
+  return {
+    type: 'setLink',
+    blockId: op.blockId,
+    startOffset: op.startOffset,
+    endOffset: op.endOffset,
+    href: '',
+  };
+}
+
+// ============================================================
 // ClearFormatting Operation
 // ============================================================
 
@@ -714,11 +813,12 @@ export function applyClearFormatting(
   );
   if (startRunIndex < 0) return;
 
-  // Clear marks and attrs from the exact runs covering the range
+  // Clear marks, attrs, and href from the exact runs covering the range
   for (let i = startRunIndex; i <= endRunIndex; i++) {
     const run = textBlock.children[i];
     run.marks = [];
     run.attrs = undefined;
+    run.href = undefined;
   }
 }
 

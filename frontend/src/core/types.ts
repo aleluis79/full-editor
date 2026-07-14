@@ -6,7 +6,7 @@
 export type NodeId = string;
 
 /** Mark types that can be applied to text runs (boolean toggles) */
-export type MarkType = 'bold' | 'italic' | 'underline' | 'strikethrough';
+export type MarkType = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'link';
 
 /** Text alignment for blocks */
 export type TextAlign = 'left' | 'center' | 'right' | 'justify';
@@ -52,6 +52,7 @@ export interface TextRun extends BaseNode {
   content: string;
   marks: MarkType[];
   attrs?: StyleAttrs;
+  href?: string;
 }
 
 /** Paragraph — a block containing inline runs */
@@ -364,6 +365,21 @@ export interface ResizeColumnOp extends BaseOperation {
   prevWidth: number;
 }
 
+/** Set link on a range of text */
+export interface SetLinkOp extends BaseOperation {
+  type: 'setLink';
+  startOffset: number;
+  endOffset: number;
+  href: string;
+}
+
+/** Remove link from a range of text */
+export interface RemoveLinkOp extends BaseOperation {
+  type: 'removeLink';
+  startOffset: number;
+  endOffset: number;
+}
+
 /** Union of all operations */
 export type Operation =
   | InsertTextOp
@@ -384,7 +400,9 @@ export type Operation =
   | DeleteTableRowOp
   | DeleteTableColumnOp
   | MergeTableCellsOp
-  | ResizeColumnOp;
+  | ResizeColumnOp
+  | SetLinkOp
+  | RemoveLinkOp;
 
 /** History entry — stores forward and inverse operations */
 export interface HistoryEntry {

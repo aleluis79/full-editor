@@ -5,6 +5,13 @@ import type { Cursor, Selection, LogicalPosition, MarkType, StyleAttrs } from '.
 // Editor Store
 // ============================================================
 
+/** Range for a pending link operation (set via Ctrl+K or toolbar button) */
+export interface LinkRange {
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+}
+
 interface EditorState {
   cursor: Cursor;
   selection: Selection | null;
@@ -17,6 +24,10 @@ interface EditorState {
    *  cursor position change. Used as a dependency in Toolbar's
    *  activeStyles computation to force reliable recomputation. */
   cursorVersion: number;
+
+  // Link popup state — set by Ctrl+K in Editor, consumed by Toolbar
+  showLinkPopup: boolean;
+  pendingLinkRange: LinkRange | null;
 
   // Sticky marks — toggled from toolbar when no selection is active.
   // When non-empty, newly typed text will inherit these marks and attrs.
@@ -48,6 +59,10 @@ interface EditorState {
   clearStickyMarks: () => void;
   /** Reset stickyBreakOut after it has been consumed by insertText */
   consumeStickyBreakOut: () => void;
+
+  // Link popup actions
+  activateLinkPopup: (range: LinkRange) => void;
+  deactivateLinkPopup: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -63,6 +78,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   stickyAttrs: {},
   stickyBreakOut: false,
   stickyToggledOff: null,
+  showLinkPopup: false,
+  pendingLinkRange: null,
 
   selectTable: (tableId) => {
     set({ selectedTableId: tableId });
@@ -160,5 +177,13 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   consumeStickyBreakOut: () => {
     set({ stickyBreakOut: false, stickyToggledOff: null });
+  },
+
+  activateLinkPopup: (range) => {
+    set({ showLinkPopup: true, pendingLinkRange: range });
+  },
+
+  deactivateLinkPopup: () => {
+    set({ showLinkPopup: false, pendingLinkRange: null });
   },
 }));

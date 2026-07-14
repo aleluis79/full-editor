@@ -552,40 +552,60 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
 
       const content = run.content || '\u200B';
 
+      const handleLinkClick = (e: React.MouseEvent) => {
+        // Ctrl+Click or Meta+Click → let browser navigate (open in new tab)
+        // Regular click → prevent navigation, let editor handle it
+        if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+          e.preventDefault();
+        }
+      };
+
       if (!selRange || runEnd <= selRange[0] || runStart >= selRange[1]) {
         // Entire run outside selection — single span
         parts.push(
-          <span key={run.id || index} className="text-run" style={baseStyle}>
-            {content}
-          </span>
+          run.href ? (
+            <a
+              key={run.id || index}
+              href={run.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-run"
+              onClick={handleLinkClick}
+              style={{ ...baseStyle, color: 'blue', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              {content}
+            </a>
+          ) : (
+            <span key={run.id || index} className="text-run" style={baseStyle}>
+              {content}
+            </span>
+          )
         );
       } else {
         // Run overlaps selection — split into up to 3 parts
         const selStart = Math.max(0, selRange[0] - runStart);
         const selEnd = Math.min(runLen, selRange[1] - runStart);
+        const linkStyle: React.CSSProperties = run.href ? { color: 'blue', textDecoration: 'underline', cursor: 'pointer' } : {};
+        const wrapEl = (key: string, text: string, extraStyle?: React.CSSProperties) => {
+          const mergedStyle = { ...baseStyle, ...linkStyle, ...extraStyle };
+          if (run.href) {
+            return (
+              <a key={key} href={run.href} target="_blank" rel="noopener noreferrer" className="text-run" onClick={handleLinkClick} style={mergedStyle}>
+                {text}
+              </a>
+            );
+          }
+          return <span key={key} className="text-run" style={mergedStyle}>{text}</span>;
+        };
 
         if (selStart > 0) {
-          parts.push(
-            <span key={`${run.id || index}-pre`} className="text-run" style={baseStyle}>
-              {content.slice(0, selStart)}
-            </span>
-          );
+          parts.push(wrapEl(`${run.id || index}-pre`, content.slice(0, selStart)));
         }
         parts.push(
-          <span
-            key={`${run.id || index}-sel`}
-            className="text-run"
-            style={{ ...baseStyle, backgroundColor: SEL_BG }}
-          >
-            {content.slice(selStart, selEnd)}
-          </span>
+          wrapEl(`${run.id || index}-sel`, content.slice(selStart, selEnd), { backgroundColor: SEL_BG })
         );
         if (selEnd < runLen) {
-          parts.push(
-            <span key={`${run.id || index}-post`} className="text-run" style={baseStyle}>
-              {content.slice(selEnd)}
-            </span>
-          );
+          parts.push(wrapEl(`${run.id || index}-post`, content.slice(selEnd)));
         }
       }
 
@@ -602,7 +622,15 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
       data-block-id={block.id}
       onMouseDown={(e) => onMouseDown(block.id, e)}
       onClick={(e) => onBlockClick(block.id, e.clientX, e.clientY)}
-      onDoubleClick={(e) => onDoubleClick(block.id, e.clientX, e.clientY)}
+      onDoubleClick={(e) => {
+        // Double-click on a link → open the URL
+        const linkEl = (e.target as HTMLElement).closest('a');
+        if (linkEl?.href) {
+          window.open(linkEl.href, '_blank', 'noopener,noreferrer');
+        } else {
+          onDoubleClick(block.id, e.clientX, e.clientY);
+        }
+      }}
       onMouseUp={(e) => {
         if (e.detail === 3) {
           onTripleClick(block.id, e.clientX, e.clientY);

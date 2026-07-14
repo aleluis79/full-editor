@@ -7,6 +7,49 @@ interface TextRunProps {
   runGlobalOffset?: number;
 }
 
+/** Render the content inside a span, applying selection highlights */
+function renderContent(
+  run: TextRunType,
+  style: React.CSSProperties,
+  runId: string,
+  isFullySelected: boolean,
+  isPartiallySelected: boolean,
+  selectionRange: { start: number; end: number } | null,
+  runStart: number,
+  runEnd: number,
+) {
+  const SEL_BG = 'rgba(0, 120, 215, 0.3)';
+
+  if (isFullySelected) {
+    style.backgroundColor = SEL_BG;
+    return (
+      <span className="text-run" data-run-id={runId} style={style}>
+        {run.content}
+      </span>
+    );
+  }
+
+  if (isPartiallySelected) {
+    const localStart = Math.max(0, selectionRange!.start - runStart);
+    const localEnd = Math.min(run.content.length, selectionRange!.end - runStart);
+    const before = run.content.slice(0, localStart);
+    const selected = run.content.slice(localStart, localEnd);
+    const after = run.content.slice(localEnd);
+
+    return (
+      <span className="text-run" data-run-id={runId} style={style}>
+        {before}<span style={{ backgroundColor: SEL_BG }}>{selected}</span>{after}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-run" data-run-id={runId} style={style}>
+      {run.content}
+    </span>
+  );
+}
+
 export function TextRun({ run, selection, blockId, runGlobalOffset = 0 }: TextRunProps) {
   const style: React.CSSProperties = {};
 
@@ -39,37 +82,34 @@ export function TextRun({ run, selection, blockId, runGlobalOffset = 0 }: TextRu
   const isPartiallySelected = isSelected && !isFullySelected &&
     selectionRange.start < runEnd && selectionRange.end > runStart;
 
-  const SEL_BG = 'rgba(0, 120, 215, 0.3)';
-
-  if (isFullySelected) {
-    style.backgroundColor = SEL_BG;
-    return (
-      <span className="text-run" data-run-id={run.id} style={style}>
-        {run.content}
-      </span>
-    );
-  }
-
-  if (isPartiallySelected) {
-    // Compute local offsets within this run
-    const localStart = Math.max(0, selectionRange.start - runStart);
-    const localEnd = Math.min(run.content.length, selectionRange.end - runStart);
-    const before = run.content.slice(0, localStart);
-    const selected = run.content.slice(localStart, localEnd);
-    const after = run.content.slice(localEnd);
-
-    return (
-      <span className="text-run" data-run-id={run.id} style={style}>
-        {before}<span style={{ backgroundColor: SEL_BG }}>{selected}</span>{after}
-      </span>
-    );
-  }
-
-  return (
-    <span className="text-run" data-run-id={run.id} style={style}>
-      {run.content}
-    </span>
+  const content = renderContent(
+    run, style, run.id,
+    isFullySelected, isPartiallySelected,
+    selectionRange, runStart, runEnd,
   );
+
+  // Render as <a> when href is set
+  if (run.href) {
+    const linkStyle: React.CSSProperties = {
+      color: 'blue',
+      textDecoration: 'underline',
+      cursor: 'pointer',
+    };
+    const handleLinkClick = (e: React.MouseEvent) => {
+      // Ctrl+Click / Meta+Click → let browser navigate
+      // Single click → prevent, let editor handle cursor position
+      if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+        e.preventDefault();
+      }
+    };
+    return (
+      <a href={run.href} target="_blank" rel="noopener noreferrer" onClick={handleLinkClick} style={linkStyle}>
+        {content}
+      </a>
+    );
+  }
+
+  return content;
 }
 
 /** Get the start and end offsets of a selection within a specific block */

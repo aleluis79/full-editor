@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, DeleteBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, ResizeColumnOp, Selection, Paragraph, Heading, List, ListItem, BlockNode, Table } from '../core/types';
+import type { DocumentRoot, HistoryEntry, NodeId, MarkType, StyleAttrs, BlockAttrs, BlockType, InsertTextOp, DeleteTextOp, SplitBlockOp, MergeBlocksOp, ToggleMarkOp, SetStyleOp, SetBlockAttrsOp, InsertBlockOp, ConvertBlockOp, DeleteBlockOp, InsertImageOp, ResizeImageOp, InsertTableOp, AddTableRowOp, AddTableColumnOp, DeleteTableRowOp, DeleteTableColumnOp, MergeTableCellsOp, ResizeColumnOp, SetLinkOp, RemoveLinkOp, Selection, Paragraph, Heading, List, ListItem, BlockNode, Table } from '../core/types';
 import {
   createDocument,
   createParagraph,
@@ -22,6 +22,8 @@ import {
   applyToggleMark,
   applySetStyle,
   applySetBlockAttrs,
+  applySetLink,
+  applyRemoveLink,
   applyClearFormatting,
   applyInsertBlock,
   applyConvertBlock,
@@ -115,6 +117,8 @@ interface DocumentState {
   deleteTableColumn: (tableId: NodeId, columnIndex: number) => void;
   mergeTableCells: (tableId: NodeId, startRow: number, startCol: number, endRow: number, endCol: number) => void;
   resizeColumn: (tableId: NodeId, columnIndex: number, width: number) => void;
+  setLink: (blockId: NodeId, startOffset: number, endOffset: number, href: string) => void;
+  removeLink: (blockId: NodeId, startOffset: number, endOffset: number) => void;
   deleteBlock: (blockId: NodeId) => void;
   undo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
   redo: () => { newCursorPosition: { nodeId: string; offset: number } } | null;
@@ -1758,6 +1762,73 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       forward: [op],
       inverse: [invertOperation(op)],
       description: 'Resize column',
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  setLink: (blockId, startOffset, endOffset, href) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const op: SetLinkOp = {
+      type: 'setLink',
+      blockId,
+      startOffset,
+      endOffset,
+      href,
+    };
+
+    applySetLink(docClone, op);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [op],
+      inverse: [invertOperation(op)],
+      description: `Set link`,
+    };
+
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(entry);
+
+    set({
+      document: docClone,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      lastOperationTime: now,
+    });
+  },
+
+  removeLink: (blockId, startOffset, endOffset) => {
+    const { document, history, historyIndex } = get();
+    const docClone = cloneDocument(document);
+    const now = Date.now();
+
+    const op: RemoveLinkOp = {
+      type: 'removeLink',
+      blockId,
+      startOffset,
+      endOffset,
+    };
+
+    applyRemoveLink(docClone, op);
+
+    const entry: HistoryEntry = {
+      id: `h-${now}`,
+      timestamp: now,
+      forward: [op],
+      inverse: [invertOperation(op)],
+      description: 'Remove link',
     };
 
     const newHistory = history.slice(0, historyIndex + 1);

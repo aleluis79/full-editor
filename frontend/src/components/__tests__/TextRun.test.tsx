@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getSelectionRangeInBlock } from '../TextRun';
-import type { Selection } from '../../core/types';
+import { render, screen } from '@testing-library/react';
+import { getSelectionRangeInBlock, TextRun } from '../TextRun';
+import type { Selection, TextRun as TextRunType } from '../../core/types';
 
 function sel(
   anchorNode: string,
@@ -65,5 +66,101 @@ describe('getSelectionRangeInBlock', () => {
   it('both ends in same block with zero-length selection (collapsed)', () => {
     const s = sel('block-x', 5, 'block-x', 5);
     expect(getSelectionRangeInBlock(s, 'block-x')).toEqual({ start: 5, end: 5 });
+  });
+});
+
+// ── TextRun <a> Rendering ──────────────────────────────────────
+
+describe('TextRun <a> rendering', () => {
+  const noSelection = null;
+
+  function makeRun(overrides: Partial<TextRunType> = {}): TextRunType {
+    return {
+      id: 'run-1',
+      type: 'text',
+      content: 'Click here',
+      marks: [],
+      ...overrides,
+    };
+  }
+
+  it('renders plain span when no href is set', () => {
+    const run = makeRun({ content: 'Hello', marks: [] });
+    const { container } = render(
+      <TextRun run={run} selection={noSelection} blockId="b1" />
+    );
+    const span = container.querySelector('span');
+    expect(span).toBeTruthy();
+    expect(span!.textContent).toBe('Hello');
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('renders <a> element when href is set', () => {
+    const run = makeRun({
+      content: 'Click here',
+      marks: ['link'],
+      href: 'https://example.com',
+    });
+    render(
+      <TextRun run={run} selection={noSelection} blockId="b1" />
+    );
+    const link = screen.getByText('Click here').closest('a');
+    expect(link).toBeTruthy();
+    expect(link!.getAttribute('href')).toBe('https://example.com');
+    expect(link!.getAttribute('target')).toBe('_blank');
+    expect(link!.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('renders <a> with blue underline style', () => {
+    const run = makeRun({
+      content: 'Linked',
+      marks: ['link'],
+      href: 'https://x.com',
+    });
+    render(
+      <TextRun run={run} selection={noSelection} blockId="b1" />
+    );
+    const textEl = screen.getByText('Linked');
+    expect(textEl).toBeTruthy();
+    const link = textEl.closest('a');
+    expect(link).toBeTruthy();
+    expect(link!.style.color).toBe('blue');
+    expect(link!.style.textDecoration).toBe('underline');
+  });
+
+  it('renders <a> with combined marks (bold + link)', () => {
+    const run = makeRun({
+      content: 'Bold Link',
+      marks: ['bold', 'link'],
+      href: 'https://bold.example.com',
+    });
+    render(
+      <TextRun run={run} selection={noSelection} blockId="b1" />
+    );
+    const textEl = screen.getByText('Bold Link');
+    expect(textEl).toBeTruthy();
+    const link = textEl.closest('a');
+    expect(link).toBeTruthy();
+    expect(link!.getAttribute('href')).toBe('https://bold.example.com');
+    // Bold style is on the inner span, not the anchor element
+    const innerSpan = link!.querySelector('span');
+    expect(innerSpan).toBeTruthy();
+    expect(innerSpan!.style.fontWeight).toBe('bold');
+  });
+
+  it('preserves text content inside <a>', () => {
+    const run = makeRun({
+      content: 'Visit our site',
+      marks: ['link'],
+      href: 'https://site.com',
+    });
+    render(
+      <TextRun run={run} selection={noSelection} blockId="b1" />
+    );
+    const textEl = screen.getByText('Visit our site');
+    expect(textEl).toBeTruthy();
+    const link = textEl.closest('a');
+    expect(link).toBeTruthy();
+    expect(link!.textContent).toBe('Visit our site');
   });
 });

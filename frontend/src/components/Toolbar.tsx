@@ -34,6 +34,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const setStickyStyle = useEditorStore((s) => s.setStickyStyle);
   const clearStickyMarks = useEditorStore((s) => s.clearStickyMarks);
   const toggleMark = useDocumentStore((s) => s.toggleMark);
+  const setLink = useDocumentStore((s) => s.setLink);
+  const removeLink = useDocumentStore((s) => s.removeLink);
   const setStyle = useDocumentStore((s) => s.setStyle);
   const clearFormattingAction = useDocumentStore((s) => s.clearFormatting);
   const insertBlock = useDocumentStore((s) => s.insertBlock);
@@ -50,6 +52,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const isSaving = useDocumentStore((s) => s.isSaving);
   const markDirty = useDocumentStore((s) => s.markDirty);
   const selectedTableId = useEditorStore((s) => s.selectedTableId);
+  const showLinkPopupFromStore = useEditorStore((s) => s.showLinkPopup);
+  const pendingLinkRange = useEditorStore((s) => s.pendingLinkRange);
+  const deactivateLinkPopup = useEditorStore((s) => s.deactivateLinkPopup);
 
   const pageConfig = usePageStore((s) => s.config);
   const updatePaperSize = usePageStore((s) => s.updatePaperSize);
@@ -59,6 +64,33 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Link popup state ───────────────────────────────────────
+  const [showLinkPopup, setShowLinkPopup] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const linkInputRef = useRef<HTMLInputElement>(null);
+  // Save the selection range when the link button is clicked, so
+  // handleLinkSubmit can use it even if focus shifts clear the
+  // editor's Zustand selection (via selectionchange handler).
+  const linkSelectionRef = useRef<{ blockId: string; start: number; end: number } | null>(null);
+
+  // When activated from Ctrl+K (editor store), show the popup
+  useEffect(() => {
+    if (showLinkPopupFromStore) {
+      setShowLinkPopup(true);
+      setLinkUrl('');
+      // Clear the local ref since Ctrl+K already saved the range
+      // via pendingLinkRange — using a stale ref would be wrong.
+      linkSelectionRef.current = null;
+    }
+  }, [showLinkPopupFromStore]);
+
+  // Focus the link input when popup opens
+  useEffect(() => {
+    if (showLinkPopup) {
+      linkInputRef.current?.focus();
+    }
+  }, [showLinkPopup]);
 
   // ── Table picker state ─────────────────────────────────────
   const [showTablePicker, setShowTablePicker] = useState(false);
@@ -202,6 +234,94 @@ export function Toolbar({ onBack }: ToolbarProps) {
         convertBlock(nodeId, 'paragraph');
       }
       convertBlock(nodeId, 'list', { ordered });
+    }
+  };
+
+  // ── Link handlers ──────────────────────────────────────────
+  const handleLinkButton = () => {
+    // 1) First: check if cursor is inside an existing link → edit it
+    const { nodeId, offset } = cursor.position;
+    if (nodeId) {
+      const block = findNode(doc, nodeId);
+      if (block && (block.type === 'paragraph' || block.type === 'heading')) {
+        const textBlock = block as Paragraph | Heading;
+        let accumulated = 0;
+        for (const run of textBlock.children) {
+          if (offset < accumulated + run.content.length) {
+            if (run.href && run.marks.includes('link')) {
+              linkSelectionRef.current = {
+                blockId: block.id,
+                start: accumulated,
+                end: accumulated + run.content.length,
+              };
+              setLinkUrl(run.href);
+              setShowLinkPopup(true);
+              return;
+            }
+            break;
+          }
+          accumulated += run.content.length;
+        }
+      }
+    }
+
+    // 2) No link under cursor: check if there's a selection to add a link
+    if (hasSelection) {
+      const { start, end } = getSelectionRange(selection!, doc);
+      linkSelectionRef.current = {
+        blockId: start.nodeId,
+        start: start.offset,
+        end: end.offset,
+      };
+      setLinkUrl('');
+      setShowLinkPopup(true);
+      return;
+    }
+  };
+
+  const handleLinkSubmit = () => {
+    const url = linkUrl.trim();
+
+    try {
+      if (linkSelectionRef.current) {
+        if (!url) {
+          // Empty URL → remove the link
+          removeLink(linkSelectionRef.current.blockId, linkSelectionRef.current.start, linkSelectionRef.current.end);
+        } else {
+          setLink(linkSelectionRef.current.blockId, linkSelectionRef.current.start, linkSelectionRef.current.end, url);
+        }
+      } else if (pendingLinkRange) {
+        if (!url) {
+          removeLink(pendingLinkRange.blockId, pendingLinkRange.startOffset, pendingLinkRange.endOffset);
+        } else {
+          setLink(pendingLinkRange.blockId, pendingLinkRange.startOffset, pendingLinkRange.endOffset, url);
+        }
+      } else {
+        return;
+      }
+    } catch (err) {
+      console.error('[Link] operation failed:', err);
+      return;
+    }
+
+    setShowLinkPopup(false);
+    setLinkUrl('');
+    linkSelectionRef.current = null;
+    deactivateLinkPopup();
+  };
+
+  const handleLinkCancel = () => {
+    setShowLinkPopup(false);
+    setLinkUrl('');
+    linkSelectionRef.current = null;
+    deactivateLinkPopup();
+  };
+
+  const handleLinkKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleLinkSubmit();
+    } else if (e.key === 'Escape') {
+      handleLinkCancel();
     }
   };
 
@@ -420,6 +540,69 @@ export function Toolbar({ onBack }: ToolbarProps) {
         >
           <s>S</s>
         </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
+      {/* Link */}
+      <div className="toolbar-group" style={{ position: 'relative' }}>
+        <button
+          className={`toolbar-btn${showLinkPopup ? ' toolbar-btn-active' : ''}`}
+          onClick={handleLinkButton}
+          disabled={!hasCursor && !hasSelection}
+          title="Link (Ctrl+K)"
+        >
+          🔗
+        </button>
+        {showLinkPopup && (
+          <div
+            className="link-popup"
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 1000,
+              background: '#fff',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              padding: '8px',
+              display: 'flex',
+              gap: '4px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}
+          >
+            <input
+              ref={linkInputRef}
+              type="text"
+              className="link-popup-input"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={handleLinkKeyDown}
+              placeholder="https://..."
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                fontSize: '13px',
+                width: '200px',
+              }}
+            />
+            <button
+              className="toolbar-btn"
+              onClick={handleLinkSubmit}
+              style={{ padding: '4px 8px', fontSize: '13px' }}
+            >
+              OK
+            </button>
+            <button
+              className="toolbar-btn"
+              onClick={handleLinkCancel}
+              style={{ padding: '4px 8px', fontSize: '13px' }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="toolbar-separator" />

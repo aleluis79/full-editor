@@ -16,7 +16,7 @@ import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition 
 import { DocumentView } from './DocumentView';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
-import type { Table, DocumentRoot } from '../core/types';
+import type { Table, DocumentRoot, Paragraph as ParagraphType, Heading as HeadingType } from '../core/types';
 
 /** Walk the document tree to find if a nodeId lives inside a table cell. */
 function findTableContext(
@@ -53,6 +53,8 @@ export function Editor({ onBack }: EditorProps) {
   const deleteSelection = useDocumentStore((s) => s.deleteSelection);
   const replaceSelection = useDocumentStore((s) => s.replaceSelection);
   const toggleMark = useDocumentStore((s) => s.toggleMark);
+  const setLink = useDocumentStore((s) => s.setLink);
+  const removeLink = useDocumentStore((s) => s.removeLink);
   const undo = useDocumentStore((s) => s.undo);
   const redo = useDocumentStore((s) => s.redo);
   const mergeBlocks = useDocumentStore((s) => s.mergeBlocks);
@@ -72,6 +74,8 @@ export function Editor({ onBack }: EditorProps) {
   const clearSelection = useEditorStore((s) => s.clearSelection);
   const extendSelection = useEditorStore((s) => s.extendSelection);
   const setFocused = useEditorStore((s) => s.setFocused);
+  const activateLinkPopup = useEditorStore((s) => s.activateLinkPopup);
+  const deactivateLinkPopup = useEditorStore((s) => s.deactivateLinkPopup);
 
   const calculateLayout = useLayoutStore((s) => s.calculateLayout);
   const layout = useLayoutStore((s) => s.layout);
@@ -883,6 +887,50 @@ export function Editor({ onBack }: EditorProps) {
           break;
         }
 
+        case 'k': {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (hasSelection) {
+              // Open link popup with the selection range
+              const { start, end } = getSelectionRange(selection!, doc);
+              activateLinkPopup({
+                blockId: start.nodeId,
+                startOffset: start.offset,
+                endOffset: end.offset,
+              });
+            } else {
+              // No selection — check if cursor is inside a link
+              const block = findNode(doc, nodeId);
+              if (block && (block.type === 'paragraph' || block.type === 'heading')) {
+                const textBlock = block as ParagraphType | HeadingType;
+                let accumulated = 0;
+                for (const run of textBlock.children) {
+                  if (offset < accumulated + run.content.length) {
+                    // Cursor is inside this run
+                    if (run.href && run.marks.includes('link')) {
+                      // Remove the link
+                      removeLink(block.id, accumulated, accumulated + run.content.length);
+                    }
+                    break;
+                  }
+                  accumulated += run.content.length;
+                }
+              }
+            }
+          } else {
+            e.preventDefault();
+            if (hasSelection) {
+              const result = replaceSelection(selection!, e.key);
+              setCursorPosition(result.newCursorPosition);
+              clearSelection();
+            } else {
+              insertText(nodeId, offset, e.key);
+              setCursorPosition({ nodeId, offset: offset + 1 });
+            }
+          }
+          break;
+        }
+
         case 'u': {
           if ((e.ctrlKey || e.metaKey) && hasSelection) {
             e.preventDefault();
@@ -1002,8 +1050,8 @@ export function Editor({ onBack }: EditorProps) {
     [
       cursor, doc, selection,
       saveDocument, insertBlock, deleteBlock, insertText, deleteText, splitBlock, mergeBlocks,
-      deleteSelection, replaceSelection, toggleMark,
-      undo, redo,
+      deleteSelection, replaceSelection, toggleMark, setLink, removeLink,
+      undo, redo, activateLinkPopup, deactivateLinkPopup,
       setCursorPosition, setSelection, clearSelection, extendSelection,
       moveCursorVisualLine,
     ]
