@@ -56,13 +56,14 @@ export function TextRun({ run, selection, blockId, runGlobalOffset = 0 }: TextRu
   // Boolean marks
   if (run.marks.includes('bold')) style.fontWeight = 'bold';
   if (run.marks.includes('italic')) style.fontStyle = 'italic';
-  if (run.marks.includes('underline')) style.textDecoration = 'underline';
-  if (run.marks.includes('strikethrough')) style.textDecoration = 'line-through';
+  if (run.marks.includes('superscript')) { style.verticalAlign = 'super'; style.fontSize = 'smaller'; }
+  if (run.marks.includes('subscript')) { style.verticalAlign = 'sub'; style.fontSize = 'smaller'; }
 
-  // If both underline and strikethrough, combine
-  if (run.marks.includes('underline') && run.marks.includes('strikethrough')) {
-    style.textDecoration = 'underline line-through';
-  }
+  // Combine text-decoration for underline + strikethrough
+  const textDecorations: string[] = [];
+  if (run.marks.includes('underline')) textDecorations.push('underline');
+  if (run.marks.includes('strikethrough')) textDecorations.push('line-through');
+  if (textDecorations.length > 0) style.textDecoration = textDecorations.join(' ');
 
   // Style attributes
   if (run.attrs?.fontFamily) style.fontFamily = run.attrs.fontFamily;

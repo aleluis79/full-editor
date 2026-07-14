@@ -6,7 +6,7 @@
 export type NodeId = string;
 
 /** Mark types that can be applied to text runs (boolean toggles) */
-export type MarkType = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'link';
+export type MarkType = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'superscript' | 'subscript' | 'link';
 
 /** Text alignment for blocks */
 export type TextAlign = 'left' | 'center' | 'right' | 'justify';

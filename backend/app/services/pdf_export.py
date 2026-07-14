@@ -323,6 +323,10 @@ class PDFExporter:
                     text = f'<u>{text}</u>'
                 if 'strikethrough' in marks:
                     text = f'<strike>{text}</strike>'
+                if 'superscript' in marks:
+                    text = f'<super>{text}</super>'
+                if 'subscript' in marks:
+                    text = f'<sub>{text}</sub>'
                 parts.append(text)
             # Add newline between paragraphs
             parts.append('<br/>')
@@ -440,6 +444,10 @@ class PDFExporter:
                     content = f"<u>{content}</u>"
                 if "strikethrough" in marks:
                     content = f"<strike>{content}</strike>"
+                if "superscript" in marks:
+                    content = f"<super>{content}</super>"
+                if "subscript" in marks:
+                    content = f"<sub>{content}</sub>"
                 
                 # Apply link wrapping (before font attrs so font tags nest inside link)
                 href = child.get("href", "")

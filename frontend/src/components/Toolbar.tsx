@@ -553,6 +553,20 @@ export function Toolbar({ onBack }: ToolbarProps) {
         >
           <s>S</s>
         </button>
+        <button
+          className={`toolbar-btn${effectiveMarks.has('superscript') ? ' toolbar-btn-active' : ''}`}
+          onClick={() => handleToggleMark('superscript')}
+          title="Superscript"
+        >
+          <sup>X²</sup>
+        </button>
+        <button
+          className={`toolbar-btn${effectiveMarks.has('subscript') ? ' toolbar-btn-active' : ''}`}
+          onClick={() => handleToggleMark('subscript')}
+          title="Subscript"
+        >
+          <sub>X₂</sub>
+        </button>
       </div>
 
       <div className="toolbar-separator" />

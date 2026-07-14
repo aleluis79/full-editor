@@ -552,10 +552,15 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
       const baseStyle: React.CSSProperties = {};
       if (run.marks.includes('bold')) baseStyle.fontWeight = 'bold';
       if (run.marks.includes('italic')) baseStyle.fontStyle = 'italic';
-      if (run.marks.includes('underline')) baseStyle.textDecoration = 'underline';
-      if (run.marks.includes('strikethrough')) baseStyle.textDecoration = 'line-through';
+      if (run.marks.includes('superscript')) { baseStyle.verticalAlign = 'super'; baseStyle.fontSize = 'smaller'; }
+      if (run.marks.includes('subscript')) { baseStyle.verticalAlign = 'sub'; baseStyle.fontSize = 'smaller'; }
+      // Combine text-decoration for underline + strikethrough
+      const textDecorations: string[] = [];
+      if (run.marks.includes('underline')) textDecorations.push('underline');
+      if (run.marks.includes('strikethrough')) textDecorations.push('line-through');
+      if (textDecorations.length > 0) baseStyle.textDecoration = textDecorations.join(' ');
       if (run.attrs?.fontFamily) baseStyle.fontFamily = run.attrs.fontFamily as string;
-      if (run.attrs?.fontSize) baseStyle.fontSize = run.attrs.fontSize as number;
+      if (run.attrs?.fontSize && !run.marks.includes('superscript') && !run.marks.includes('subscript')) baseStyle.fontSize = run.attrs.fontSize as number;
       if (run.attrs?.color) baseStyle.color = run.attrs.color as string;
       if (run.attrs?.backgroundColor) baseStyle.backgroundColor = run.attrs.backgroundColor as string;
 

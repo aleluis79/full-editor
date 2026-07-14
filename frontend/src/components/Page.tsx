@@ -174,12 +174,13 @@ function LayoutParagraph({ block, layout, isActive, onClick, onDoubleClick, onTr
           style={{
             fontWeight: run.marks.includes('bold') ? 'bold' : 'normal',
             fontStyle: run.marks.includes('italic') ? 'italic' : 'normal',
+            verticalAlign: run.marks.includes('superscript') ? 'super' as const : run.marks.includes('subscript') ? 'sub' as const : undefined,
+            fontSize: (run.marks.includes('superscript') || run.marks.includes('subscript')) ? 'smaller' as const : (run.attrs?.fontSize),
             textDecoration: [
               run.marks.includes('underline') ? 'underline' : '',
               run.marks.includes('strikethrough') ? 'line-through' : '',
             ].filter(Boolean).join(' ') || 'none',
             fontFamily: run.attrs?.fontFamily,
-            fontSize: run.attrs?.fontSize,
             color: run.attrs?.color,
             backgroundColor: run.attrs?.backgroundColor,
           }}
