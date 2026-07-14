@@ -236,13 +236,17 @@ class PDFExporter:
             3: self.styles['Heading3Custom'],
         }
         base = style_map.get(level, self.styles['Heading1Custom'])
-        max_fs = self._max_font_size_in_block(block)
+        # Use the heading's inherent font size (from its level) as the base,
+        # then consider any larger custom fontSize from individual runs
+        heading_base_fs = {1: 24, 2: 18, 3: 15}.get(level, 24)
+        max_run_fs = self._max_font_size_in_block(block)
+        effective_fs = max(heading_base_fs, max_run_fs)
         style = ParagraphStyle(
             'HeadingAligned',
             parent=base,
             alignment=align,
-            leading=max(max_fs * 1.3, base.leading or 24),
-            fontSize=max_fs,
+            leading=effective_fs * 1.3,
+            fontSize=effective_fs,
         )
         
         if text:
