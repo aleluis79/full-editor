@@ -212,36 +212,56 @@ class PDFExporter:
         text = self._extract_text(block)
         if text:
             align = self._alignment_from_block(block)
+            max_fs = self._max_font_size_in_block(block)
             style = ParagraphStyle(
                 'BodyTextAligned',
                 parent=self.styles['BodyTextCustom'],
                 alignment=align,
+                leading=max_fs * 1.5,
+                fontSize=min(12, max_fs),
             )
             return [Paragraph(text, style)]
         # Empty paragraph → blank line using a spacer the height of one text line
-        return [Spacer(1, self.styles['BodyTextCustom'].leading or 16)]
+        return [Spacer(1, max(self.styles['BodyTextCustom'].leading or 16, self._max_font_size_in_block(block) * 1.5))]
     
     def _process_heading(self, block: Dict[str, Any]) -> List:
         """Process heading block."""
         level = block.get("level", 1)
         text = self._extract_text(block)
         align = self._alignment_from_block(block)
-        
+
         style_map = {
             1: self.styles['Heading1Custom'],
             2: self.styles['Heading2Custom'],
             3: self.styles['Heading3Custom'],
         }
         base = style_map.get(level, self.styles['Heading1Custom'])
+        max_fs = self._max_font_size_in_block(block)
         style = ParagraphStyle(
             'HeadingAligned',
             parent=base,
             alignment=align,
+            leading=max(max_fs * 1.3, base.leading or 24),
+            fontSize=max_fs,
         )
         
         if text:
             return [Paragraph(text, style)]
         return []
+    
+    def _max_font_size_in_block(self, block: Dict[str, Any]) -> int:
+        """Find the maximum font size across all text runs in a block."""
+        max_size = 12  # default body font size
+        children = block.get("children", [])
+        for child in children:
+            if child.get("type") == "text":
+                attrs = child.get("attrs") or {}
+                fs = attrs.get("fontSize")
+                if fs and isinstance(fs, (int, float)):
+                    max_size = max(max_size, int(fs))
+            elif child.get("type") in ("paragraph", "heading", "listItem"):
+                max_size = max(max_size, self._max_font_size_in_block(child))
+        return max_size
     
     def _process_list(self, block: Dict[str, Any]) -> List:
         """Process list block."""
@@ -313,6 +333,7 @@ class PDFExporter:
             for run in runs:
                 content = run.get("content", "")
                 marks = run.get("marks", [])
+                attrs = run.get("attrs", {}) or {}
                 # Wrap in formatting tags
                 text = content
                 if 'bold' in marks:
@@ -327,6 +348,28 @@ class PDFExporter:
                     text = f'<super>{text}</super>'
                 if 'subscript' in marks:
                     text = f'<sub>{text}</sub>'
+                # Apply link wrapping
+                href = run.get("href", "")
+                if "link" in marks and href:
+                    text = f'<a href="{href}">{text}</a>'
+                # Apply background color
+                bg = attrs.get("backgroundColor")
+                if bg and isinstance(bg, str):
+                    text = f'<span backcolor="{bg}">{text}</span>'
+                # Apply inline font attrs (size, family, color)
+                font_attrs = []
+                fs = attrs.get("fontSize")
+                if fs is not None:
+                    font_attrs.append(f'size="{fs}"')
+                ff = attrs.get("fontFamily")
+                if ff is not None and isinstance(ff, str):
+                    mapped = _map_font(ff)
+                    font_attrs.append(f'face="{mapped}"')
+                color = attrs.get("color")
+                if color and isinstance(color, str):
+                    font_attrs.append(f'color="{color}"')
+                if font_attrs:
+                    text = f'<font {" ".join(font_attrs)}>{text}</font>'
                 parts.append(text)
             # Add newline between paragraphs
             parts.append('<br/>')
@@ -337,11 +380,16 @@ class PDFExporter:
         if not body:
             body = ' '
         
+        # Find max font size in cell to set appropriate leading
+        cell_max_fs = 10
+        for p in children:
+            cell_max_fs = max(cell_max_fs, self._max_font_size_in_block(p))
+        
         style = ParagraphStyle(
             'CellPara',
             fontName='Helvetica',
-            fontSize=10,
-            leading=14,
+            fontSize=min(10, cell_max_fs),
+            leading=cell_max_fs * 1.4,
             alignment=align_val,
             spaceBefore=0,
             spaceAfter=0,

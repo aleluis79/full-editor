@@ -317,6 +317,14 @@ export class LayoutEngine {
 
     for (const run of runs) {
       const words = splitIntoWords(run.content);
+      // Use the run's actual font size (from attrs) or fall back to constraint default
+      const runFontSize = run.attrs?.fontSize ?? constraints.fontSize;
+      // For superscript/subscript, use a smaller font
+      const effectiveFontSize =
+        run.marks.includes('superscript') || run.marks.includes('subscript')
+          ? runFontSize * 0.65
+          : runFontSize;
+      const runLineHeight = effectiveFontSize * constraints.lineHeight;
 
       for (const word of words) {
         // Handle newlines
@@ -333,6 +341,7 @@ export class LayoutEngine {
             lineY += currentLineHeight;
             currentLine = [];
             currentLineWidth = 0;
+            currentLineHeight = constraints.fontSize * constraints.lineHeight;
           }
           continue;
         }
@@ -340,7 +349,7 @@ export class LayoutEngine {
         const wordWidth = measureText(
           word,
           constraints.fontFamily,
-          constraints.fontSize,
+          effectiveFontSize,
           run.marks.includes('bold'),
           run.marks.includes('italic')
         ).width;
@@ -358,6 +367,12 @@ export class LayoutEngine {
           lineY += currentLineHeight;
           currentLine = [];
           currentLineWidth = 0;
+          currentLineHeight = constraints.fontSize * constraints.lineHeight;
+        }
+
+        // Track maximum line height for this line
+        if (runLineHeight > currentLineHeight) {
+          currentLineHeight = runLineHeight;
         }
 
         // Add word to current line
@@ -367,9 +382,9 @@ export class LayoutEngine {
           x: runX,
           y: 0, // Relative to line
           width: wordWidth,
-          height: currentLineHeight,
+          height: runLineHeight,
           fontFamily: constraints.fontFamily,
-          fontSize: constraints.fontSize,
+          fontSize: effectiveFontSize,
           bold: run.marks.includes('bold'),
           italic: run.marks.includes('italic'),
           underline: run.marks.includes('underline'),
