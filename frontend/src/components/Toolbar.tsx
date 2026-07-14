@@ -110,6 +110,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const [hoveredRow, setHoveredRow] = useState(-1);
   const [hoveredCol, setHoveredCol] = useState(-1);
   const tablePickerRef = useRef<HTMLDivElement>(null);
+  const [showBlockPicker, setShowBlockPicker] = useState(false);
+  const blockPickerRef = useRef<HTMLDivElement>(null);
 
   const hasSelection = selection && !isSelectionEmpty(selection);
   const hasCursor = cursor.position.nodeId !== '';
@@ -165,6 +167,18 @@ export function Toolbar({ onBack }: ToolbarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTablePicker]);
+
+  // Close block picker on outside click
+  useEffect(() => {
+    if (!showBlockPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (blockPickerRef.current && !blockPickerRef.current.contains(e.target as Node)) {
+        setShowBlockPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showBlockPicker]);
 
   // ── Handlers ───────────────────────────────────────────────
 
@@ -814,34 +828,90 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Block types */}
-      <div className="toolbar-group">
-        <select
-          className="toolbar-select"
-          value={activeBlockType}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === 'paragraph') {
-              handleConvertBlock('paragraph');
-            } else if (value.startsWith('heading')) {
-              const level = Number(value.replace('heading', '')) as 1 | 2 | 3 | 4 | 5 | 6;
-              handleConvertBlock('heading', { level });
-            } else if (value === 'blockquote') {
-              handleConvertBlock('blockquote');
-            } else if (value === 'list-ul') {
-              handleConvertBlock('list', { ordered: false });
-            } else if (value === 'list-ol') {
-              handleConvertBlock('list', { ordered: true });
-            }
-          }}
+      {/* Block types — custom dropdown with styled options */}
+      <div className="toolbar-group" style={{ position: 'relative', zIndex: 100 }}>
+        <button
+          className="toolbar-btn toolbar-btn-select"
+          onClick={() => { if (hasCursor) setShowBlockPicker(!showBlockPicker); }}
           disabled={!hasCursor}
           title="Block Type"
+          style={{ minWidth: 100, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}
         >
-          <option value="paragraph">Paragraph</option>
-          <option value="heading1">Heading 1</option>
-          <option value="heading2">Heading 2</option>
-          <option value="heading3">Heading 3</option>
-        </select>
+          <span style={{ flex: 1 }}>
+            {activeBlockType === 'paragraph' && 'Paragraph'}
+            {activeBlockType === 'heading1' && 'Heading 1'}
+            {activeBlockType === 'heading2' && 'Heading 2'}
+            {activeBlockType === 'heading3' && 'Heading 3'}
+            {activeBlockType === 'blockquote' && 'Blockquote'}
+            {activeBlockType === 'list-ul' && 'Bullet List'}
+            {activeBlockType === 'list-ol' && 'Numbered List'}
+          </span>
+          <span style={{ fontSize: 10 }}>▼</span>
+        </button>
+        {showBlockPicker && (
+          <div
+            ref={blockPickerRef}
+            className="block-picker-popover"
+            onMouseDown={(e) => e.preventDefault()}
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 1000,
+              background: '#fff',
+              border: '1px solid #ccc',
+              borderRadius: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              minWidth: 160,
+              padding: 4,
+            }}
+          >
+            <button
+              className={`block-picker-item${activeBlockType === 'paragraph' ? ' active' : ''}`}
+              onClick={() => { handleConvertBlock('paragraph'); setShowBlockPicker(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '6px 8px', border: 'none', background: 'none',
+                cursor: 'pointer', fontSize: 14, borderRadius: 3,
+              }}
+            >
+              Paragraph
+            </button>
+            <button
+              className={`block-picker-item${activeBlockType === 'heading1' ? ' active' : ''}`}
+              onClick={() => { handleConvertBlock('heading', { level: 1 }); setShowBlockPicker(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '6px 8px', border: 'none', background: 'none',
+                cursor: 'pointer', fontSize: 22, fontWeight: 'bold', borderRadius: 3,
+              }}
+            >
+              Heading 1
+            </button>
+            <button
+              className={`block-picker-item${activeBlockType === 'heading2' ? ' active' : ''}`}
+              onClick={() => { handleConvertBlock('heading', { level: 2 }); setShowBlockPicker(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '6px 8px', border: 'none', background: 'none',
+                cursor: 'pointer', fontSize: 18, fontWeight: 'bold', borderRadius: 3,
+              }}
+            >
+              Heading 2
+            </button>
+            <button
+              className={`block-picker-item${activeBlockType === 'heading3' ? ' active' : ''}`}
+              onClick={() => { handleConvertBlock('heading', { level: 3 }); setShowBlockPicker(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '6px 8px', border: 'none', background: 'none',
+                cursor: 'pointer', fontSize: 15, fontWeight: 'bold', borderRadius: 3,
+              }}
+            >
+              Heading 3
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="toolbar-separator" />

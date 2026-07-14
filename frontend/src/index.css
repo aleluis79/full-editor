@@ -987,4 +987,18 @@ body {
   font-size: 18px;
 }
 
+/* ── Block Type Picker ─────────────────────────────── */
+
+.block-picker-item {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
+.block-picker-item:hover {
+  background: #f0f0f0;
+}
+
+.block-picker-item.active {
+  background: #e0e7ff;
+}
+
 
