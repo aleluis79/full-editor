@@ -257,15 +257,15 @@ export function createSplitBlockOp(
 
 export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
   const block = findNode(doc, op.blockId);
-  if (!block || block.type !== 'paragraph') {
-    throw new Error(`Block ${op.blockId} not found or is not a paragraph`);
+  if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) {
+    throw new Error(`Block ${op.blockId} not found or is not a paragraph/heading`);
   }
 
-  const paragraph = block as Paragraph;
-  const { runIndex, localOffset } = findRunAtOffset(paragraph, op.offset);
+  const textBlock = block as Paragraph | Heading;
+  const { runIndex, localOffset } = findRunAtOffset(textBlock, op.offset);
 
   // Split the run at the offset
-  const run = paragraph.children[runIndex];
+  const run = textBlock.children[runIndex];
   const textBefore = run.content.slice(0, localOffset);
   const textAfter = run.content.slice(localOffset);
 
@@ -280,17 +280,17 @@ export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
     newChildren.push(createTextRun(''));
   }
 
-  // Add remaining runs from original paragraph to new paragraph
-  for (let i = runIndex + 1; i < paragraph.children.length; i++) {
-    newChildren.push({ ...paragraph.children[i], id: paragraph.children[i].id });
+  // Add remaining runs from original block to new paragraph
+  for (let i = runIndex + 1; i < textBlock.children.length; i++) {
+    newChildren.push({ ...textBlock.children[i], id: textBlock.children[i].id });
   }
 
   // Remove moved runs from original
-  paragraph.children.splice(runIndex + 1);
+  textBlock.children.splice(runIndex + 1);
 
-  // If original paragraph has no children left, add empty run
-  if (paragraph.children.length === 0) {
-    paragraph.children.push(createTextRun(''));
+  // If original block has no children left, add empty run
+  if (textBlock.children.length === 0) {
+    textBlock.children.push(createTextRun(''));
   }
 
   const newParagraph = createParagraph('');
