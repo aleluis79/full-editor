@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchDocuments, deleteDocument, createDocument, type DocumentData } from '../api/client';
+import { Delete } from './icons';
 
 interface DocumentManagerProps {
   onOpenDocument: (id: string) => void;
@@ -101,7 +102,7 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
                 onClick={(e) => handleDelete(doc.id, e)}
                 title="Eliminar documento"
               >
-                ✕
+                <Delete size={16} />
               </button>
             </div>
           ))}

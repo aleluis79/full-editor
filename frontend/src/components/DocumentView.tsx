@@ -58,8 +58,8 @@ export function DocumentView({ blocks: _blocks, activeBlockId, onBlockMouseDown,
   if (pages.length === 0) {
     return (
       <div className="document-view" ref={containerRef}>
-        <div className="page" style={{ position: 'relative' }}>
-          <div className="page-content" style={{ position: 'relative' }}>
+        <div className="page">
+          <div className="page-content">
             {blocks.map((block) => renderBlock(block, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout))}
           </div>
         </div>
@@ -128,10 +128,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
       style={{
         width: page.width,
         height: page.height,
-        position: 'relative',
         marginBottom: 20,
-        background: 'white',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
       }}
     >
       {/* Header */}
@@ -139,14 +136,10 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
         <div
           className="page-header"
           style={{
-            position: 'absolute',
             top: page.headerArea.y,
             left: page.headerArea.x,
             width: page.headerArea.width,
             height: page.headerArea.height,
-            borderBottom: '1px solid #eee',
-            fontSize: 12,
-            color: '#666',
           }}
         >
           {renderHeaderFooterContent(headerFooter.header.runs)}
@@ -220,16 +213,10 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
         <div
           className="page-footer"
           style={{
-            position: 'absolute',
             top: page.footerArea.y,
             left: page.footerArea.x,
             width: page.footerArea.width,
             height: page.footerArea.height,
-            borderTop: '1px solid #eee',
-            display: 'flex',
-            alignItems: 'center',
-            fontSize: 12,
-            color: '#666',
           }}
         >
           {renderPageNumber(page.pageNumber, headerFooter.pageNumberPosition)}
@@ -238,18 +225,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
 
       {/* Page number (when no footer) */}
       {!page.footerArea && (
-        <div
-          className="page-number"
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 0,
-            right: 0,
-            textAlign: 'center',
-            fontSize: 12,
-            color: '#666',
-          }}
-        >
+        <div className="page-number">
           {page.pageNumber}
         </div>
       )}

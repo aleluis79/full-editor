@@ -7,6 +7,26 @@ import { exportPDF } from '../api/client';
 import { usePageStore } from '../stores/page-store';
 import { useLayoutStore } from '../stores/layout-store';
 import type { MarkType, StyleAttrs, BlockType, Paragraph, Heading } from '../core/types';
+import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Superscript,
+  Subscript,
+  Link,
+  Image,
+  Table,
+  ListUl,
+  ListOl,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  ClearFormatting,
+  Save,
+  Pdf,
+  Back,
+} from './icons';
 
 const FONT_FAMILIES = [
   'Georgia',
@@ -441,7 +461,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   // textarea. Without this, clicking any <button> blurs the textarea
   // and keyboard input stops working.
   // Using closest('button') because the click target may be a child
-  // element inside the button (e.g. <strong>, <em>, <span>, <u>).
+  // element inside the button (e.g. SVG, path, span).
   const handleToolbarMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) {
       e.preventDefault();
@@ -458,7 +478,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
             onClick={onBack}
             title="Volver a documentos"
           >
-            ←
+            <Back />
           </button>
         )}
       </div>
@@ -500,14 +520,14 @@ export function Toolbar({ onBack }: ToolbarProps) {
             disabled={!isDirty || isSaving}
             title={isSaving ? 'Guardando...' : 'Guardar'}
           >
-            {isSaving ? '⏳' : '💾'}
+            {isSaving ? '⏳' : <Save />}
           </button>
           <button
             className="toolbar-btn"
             onClick={handleExportPDF}
             title="Exportar a PDF"
           >
-            <span className="pdf-icon">PDF</span>
+            <Pdf />
           </button>
         </div>
       )}
@@ -544,42 +564,42 @@ export function Toolbar({ onBack }: ToolbarProps) {
           onClick={() => handleToggleMark('bold')}
           title="Bold (Ctrl+B)"
         >
-          <strong>B</strong>
+          <Bold />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('italic') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('italic')}
           title="Italic (Ctrl+I)"
         >
-          <em>I</em>
+          <Italic />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('underline') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('underline')}
           title="Underline (Ctrl+U)"
         >
-          <u>U</u>
+          <Underline />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('strikethrough') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('strikethrough')}
           title="Strikethrough"
         >
-          <s>S</s>
+          <Strikethrough />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('superscript') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('superscript')}
           title="Superscript"
         >
-          <sup>X²</sup>
+          <Superscript />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('subscript') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('subscript')}
           title="Subscript"
         >
-          <sub>X₂</sub>
+          <Subscript />
         </button>
       </div>
 
@@ -593,25 +613,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!hasCursor && !hasSelection}
           title="Link (Ctrl+K)"
         >
-          🔗
+          <Link />
         </button>
         {showLinkPopup && (
-          <div
-            className="link-popup"
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              zIndex: 1000,
-              background: '#fff',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              padding: '8px',
-              display: 'flex',
-              gap: '4px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            }}
-          >
+          <div className="link-popup">
             <input
               ref={linkInputRef}
               type="text"
@@ -620,25 +625,16 @@ export function Toolbar({ onBack }: ToolbarProps) {
               onChange={(e) => setLinkUrl(e.target.value)}
               onKeyDown={handleLinkKeyDown}
               placeholder="https://..."
-              style={{
-                padding: '4px 8px',
-                border: '1px solid #ccc',
-                borderRadius: '3px',
-                fontSize: '13px',
-                width: '200px',
-              }}
             />
             <button
               className="toolbar-btn"
               onClick={handleLinkSubmit}
-              style={{ padding: '4px 8px', fontSize: '13px' }}
             >
               OK
             </button>
             <button
               className="toolbar-btn"
               onClick={handleLinkCancel}
-              style={{ padding: '4px 8px', fontSize: '13px' }}
             >
               Cancel
             </button>
@@ -671,7 +667,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Alinear a la izquierda"
         >
-          <span className="align-icon"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
+          <AlignLeft />
         </button>
         <button
           className="toolbar-btn"
@@ -694,7 +690,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Centrar"
         >
-          <span className="align-icon align-icon-center"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
+          <AlignCenter />
         </button>
         <button
           className="toolbar-btn"
@@ -717,7 +713,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!selectedTableId && !hasCursor && !hasSelection}
           title="Alinear a la derecha"
         >
-          <span className="align-icon align-icon-right"><span className="align-line" style={{ width: '60%' }} /><span className="align-line" style={{ width: '80%' }} /><span className="align-line" /></span>
+          <AlignRight />
         </button>
       </div>
 
@@ -730,7 +726,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!hasSelection && stickyMarks.length === 0 && Object.keys(stickyAttrs).length === 0}
           title="Clear Formatting"
         >
-          <span style={{ fontFamily: 'sans-serif', fontSize: '14px' }}>↺</span>
+          <ClearFormatting />
         </button>
       </div>
 
@@ -744,7 +740,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!hasCursor}
           title="Bullet List"
         >
-          <span className="toolbar-list-icon">&#x2022;</span>
+          <ListUl />
         </button>
         <button
           className={`toolbar-btn${activeBlockType === 'list-ol' ? ' toolbar-btn-active' : ''}`}
@@ -752,7 +748,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           disabled={!hasCursor}
           title="Numbered List"
         >
-          <span className="toolbar-list-icon toolbar-list-icon-ol">1.</span>
+          <ListOl />
         </button>
       </div>
 
@@ -816,10 +812,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
         </label>
         {effectiveAttrs.backgroundColor && (
           <button
-            className="toolbar-btn"
+            className="toolbar-btn toolbar-btn-highlight-remove"
             onClick={() => handleSetStyle('backgroundColor', undefined)}
             title="Remove highlight"
-            style={{ fontSize: '14px', width: '24px', height: '24px', marginLeft: '2px' }}
           >
             ×
           </button>
@@ -835,7 +830,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
           onClick={() => { if (hasCursor) setShowBlockPicker(!showBlockPicker); }}
           disabled={!hasCursor}
           title="Block Type"
-          style={{ minWidth: 100, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}
         >
           <span style={{ flex: 1 }}>
             {activeBlockType === 'paragraph' && 'Paragraph'}
@@ -853,60 +847,31 @@ export function Toolbar({ onBack }: ToolbarProps) {
             ref={blockPickerRef}
             className="block-picker-popover"
             onMouseDown={(e) => e.preventDefault()}
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              zIndex: 1000,
-              background: '#fff',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              minWidth: 160,
-              padding: 4,
-            }}
           >
             <button
               className={`block-picker-item${activeBlockType === 'paragraph' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('paragraph'); setShowBlockPicker(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 8px', border: 'none', background: 'none',
-                cursor: 'pointer', fontSize: 14, borderRadius: 3,
-              }}
             >
               Paragraph
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading1' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 1 }); setShowBlockPicker(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 8px', border: 'none', background: 'none',
-                cursor: 'pointer', fontSize: 22, fontWeight: 'bold', borderRadius: 3,
-              }}
+              style={{ fontSize: 22, fontWeight: 'bold' }}
             >
               Heading 1
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading2' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 2 }); setShowBlockPicker(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 8px', border: 'none', background: 'none',
-                cursor: 'pointer', fontSize: 18, fontWeight: 'bold', borderRadius: 3,
-              }}
+              style={{ fontSize: 18, fontWeight: 'bold' }}
             >
               Heading 2
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading3' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 3 }); setShowBlockPicker(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 8px', border: 'none', background: 'none',
-                cursor: 'pointer', fontSize: 15, fontWeight: 'bold', borderRadius: 3,
-              }}
+              style={{ fontSize: 15, fontWeight: 'bold' }}
             >
               Heading 3
             </button>
@@ -930,7 +895,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           onClick={() => imageInputRef.current?.click()}
           title="Insert Image"
         >
-          🖼️
+          <Image />
         </button>
       </div>
 
@@ -943,7 +908,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           onClick={() => setShowTablePicker(!showTablePicker)}
           title="Insert Table"
         >
-          ⊞
+          <Table />
         </button>
         {showTablePicker && (
           <div

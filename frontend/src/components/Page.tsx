@@ -18,8 +18,8 @@ export function Page({ blocks, activeBlockId, onBlockMouseDown, onBlockClick, on
   const getBlockLayout = useLayoutStore((s) => s.getBlockLayout);
 
   return (
-    <div className="page" style={{ position: 'relative' }}>
-      <div className="page-content" style={{ position: 'relative' }}>
+    <div className="page">
+      <div className="page-content">
         {blocks.map((block) => {
           const blockLayout = getBlockLayout(block.id);
 
