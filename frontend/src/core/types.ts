@@ -22,6 +22,8 @@ export interface StyleAttrs {
 /** Block-level style attributes */
 export interface BlockAttrs {
   textAlign?: TextAlign;
+  /** Per-block line height override (positive float). When absent, the layout engine default applies. */
+  lineHeight?: number;
 }
 
 /** Block types */

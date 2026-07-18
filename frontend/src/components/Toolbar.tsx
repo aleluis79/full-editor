@@ -26,6 +26,7 @@ import {
   Save,
   Pdf,
   Back,
+  LineHeight,
 } from './icons';
 
 const FONT_FAMILIES = [
@@ -133,6 +134,11 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const [showBlockPicker, setShowBlockPicker] = useState(false);
   const blockPickerRef = useRef<HTMLDivElement>(null);
 
+  // ── Line spacing popup state ──────────────────────────────────
+  const LINE_SPACING_PRESETS = [1.0, 1.15, 1.5, 2.0, 2.5, 3.0] as const;
+  const [showLineSpacing, setShowLineSpacing] = useState(false);
+  const lineSpacingRef = useRef<HTMLDivElement>(null);
+
   const hasSelection = selection && !isSelectionEmpty(selection);
   const hasCursor = cursor.position.nodeId !== '';
 
@@ -199,6 +205,18 @@ export function Toolbar({ onBack }: ToolbarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showBlockPicker]);
+
+  // Close line spacing popup on outside click
+  useEffect(() => {
+    if (!showLineSpacing) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (lineSpacingRef.current && !lineSpacingRef.current.contains(e.target as Node)) {
+        setShowLineSpacing(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLineSpacing]);
 
   // ── Handlers ───────────────────────────────────────────────
 
@@ -372,6 +390,24 @@ export function Toolbar({ onBack }: ToolbarProps) {
     }
   };
 
+  // ── Line spacing handlers ──────────────────────────────────
+  const handleLineSpacingSelect = (value: number | undefined) => {
+    if (selectedTableId) {
+      setBlockAttrs(selectedTableId, { lineHeight: value });
+    } else if (hasSelection) {
+      const startBlock = selection!.anchor.nodeId;
+      const endBlock = selection!.focus.nodeId;
+      if (startBlock !== endBlock) {
+        setBlockAttrsRange(startBlock, endBlock, { lineHeight: value });
+      } else {
+        setBlockAttrs(startBlock, { lineHeight: value });
+      }
+    } else if (hasCursor) {
+      setBlockAttrs(cursor.position.nodeId, { lineHeight: value });
+    }
+    setShowLineSpacing(false);
+  };
+
   const handleInsertTable = (rows: number, cols: number) => {
     if (!hasCursor) return;
     insertTable(cursor.position.nodeId, rows, cols);
@@ -419,6 +455,39 @@ export function Toolbar({ onBack }: ToolbarProps) {
     },
     []
   );
+
+  // ── Current lineHeight from cursor position (for toolbar display) ──
+  const LINE_HEIGHT_DEFAULTS = { paragraph: 1.5, heading: 1.2 } as const;
+  const currentExplicitLineHeight = useMemo(() => {
+    const { nodeId } = cursor.position;
+    if (!nodeId) return undefined;
+    const block = findNode(doc, nodeId);
+    if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return undefined;
+    return (block as Paragraph | Heading).attrs?.lineHeight;
+  }, [doc, cursor.position.nodeId]);
+
+  /** The effective lineHeight shown in the popup — falls back to block-type default */
+  const effectiveLineHeight = useMemo(() => {
+    const { nodeId } = cursor.position;
+    if (!nodeId) return LINE_HEIGHT_DEFAULTS.paragraph;
+    const block = findNode(doc, nodeId);
+    if (!block) return LINE_HEIGHT_DEFAULTS.paragraph;
+    const explicit = (block as Paragraph | Heading).attrs?.lineHeight;
+    if (explicit !== undefined) return explicit;
+    return block.type === 'heading' ? LINE_HEIGHT_DEFAULTS.heading : LINE_HEIGHT_DEFAULTS.paragraph;
+  }, [doc, cursor.position.nodeId]);
+
+  /** True when the block has an explicit lineHeight different from default */
+  const hasNonDefaultLineHeight = useMemo(() => {
+    const { nodeId } = cursor.position;
+    if (!nodeId) return false;
+    const block = findNode(doc, nodeId);
+    if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return false;
+    const explicit = (block as Paragraph | Heading).attrs?.lineHeight;
+    if (explicit === undefined) return false;
+    const def = block.type === 'heading' ? LINE_HEIGHT_DEFAULTS.heading : LINE_HEIGHT_DEFAULTS.paragraph;
+    return explicit !== def;
+  }, [doc, cursor.position.nodeId]);
 
   // ── Determine active block type for the block selector ─────
   const activeBlockType = useMemo(() => {
@@ -715,6 +784,39 @@ export function Toolbar({ onBack }: ToolbarProps) {
         >
           <AlignRight />
         </button>
+      </div>
+
+      {/* Line spacing */}
+      <div className="toolbar-group" style={{ position: 'relative' }}>
+        <button
+          className={`toolbar-btn${hasNonDefaultLineHeight || showLineSpacing ? ' toolbar-btn-active' : ''}`}
+          onClick={() => setShowLineSpacing(!showLineSpacing)}
+          disabled={!selectedTableId && !hasCursor && !hasSelection}
+          title="Line spacing"
+        >
+          <LineHeight />
+        </button>
+        {showLineSpacing && (
+          <div
+            className="line-spacing-popover"
+            ref={lineSpacingRef}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {LINE_SPACING_PRESETS.map((value) => {
+              const isActive = effectiveLineHeight === value;
+              const label = value % 1 === 0 ? value.toFixed(1) : String(value);
+              return (
+                <button
+                  key={value}
+                  className={`line-spacing-item${isActive ? ' active' : ''}`}
+                  onClick={() => handleLineSpacingSelect(currentExplicitLineHeight === value ? undefined : value)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="toolbar-separator" />

@@ -207,9 +207,17 @@ class PDFExporter:
         }
         return mapping.get(align, TA_LEFT)
 
+    def _line_height_from_block(self, block: Dict[str, Any], default: float = 1.5) -> float:
+        """Get per-block lineHeight from attrs, falling back to given default."""
+        attrs = block.get("attrs", {}) or {}
+        return attrs.get("lineHeight", default)
+
     def _process_paragraph(self, block: Dict[str, Any]) -> List:
         """Process paragraph block. Empty paragraphs become blank lines."""
         text = self._extract_text(block)
+        block_lh = self._line_height_from_block(block, 1.5)
+        # Only add half-leading when the user explicitly set a non-default
+        # lineHeight — otherwise keep the original pagination intact.
         if text:
             align = self._alignment_from_block(block)
             max_fs = self._max_font_size_in_block(block)
@@ -217,18 +225,19 @@ class PDFExporter:
                 'BodyTextAligned',
                 parent=self.styles['BodyTextCustom'],
                 alignment=align,
-                leading=max_fs * 1.5,
+                leading=max_fs * block_lh,
                 fontSize=min(12, max_fs),
             )
             return [Paragraph(text, style)]
         # Empty paragraph → blank line using a spacer the height of one text line
-        return [Spacer(1, max(self.styles['BodyTextCustom'].leading or 16, self._max_font_size_in_block(block) * 1.5))]
+        return [Spacer(1, max(self.styles['BodyTextCustom'].leading or 16, self._max_font_size_in_block(block) * block_lh))]
     
     def _process_heading(self, block: Dict[str, Any]) -> List:
         """Process heading block."""
         level = block.get("level", 1)
         text = self._extract_text(block)
         align = self._alignment_from_block(block)
+        block_lh = self._line_height_from_block(block, 1.3)
 
         style_map = {
             1: self.styles['Heading1Custom'],
@@ -245,7 +254,7 @@ class PDFExporter:
             'HeadingAligned',
             parent=base,
             alignment=align,
-            leading=effective_fs * 1.3,
+            leading=effective_fs * block_lh,
             fontSize=effective_fs,
         )
         
@@ -386,14 +395,19 @@ class PDFExporter:
         
         # Find max font size in cell to set appropriate leading
         cell_max_fs = 10
+        cell_lh = 1.4
         for p in children:
             cell_max_fs = max(cell_max_fs, self._max_font_size_in_block(p))
+            p_attrs = p.get("attrs", {}) or {}
+            p_lh = p_attrs.get("lineHeight")
+            if p_lh is not None:
+                cell_lh = p_lh
         
         style = ParagraphStyle(
             'CellPara',
             fontName='Helvetica',
             fontSize=min(10, cell_max_fs),
-            leading=cell_max_fs * 1.4,
+            leading=cell_max_fs * cell_lh,
             alignment=align_val,
             spaceBefore=0,
             spaceAfter=0,

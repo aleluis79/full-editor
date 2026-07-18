@@ -111,3 +111,61 @@ describe('document-store uploadAndInsertImage', () => {
     await expect(store.uploadAndInsertImage(file)).rejects.toThrow('No cursor position');
   });
 });
+
+describe('document-store setBlockAttrs lineHeight', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [
+          {
+            id: 'block-1',
+            type: 'paragraph',
+            children: [{ id: 'run-1', type: 'text', content: 'Hello', marks: [], attrs: {} }],
+            attrs: {},
+          },
+        ],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('sets lineHeight when value is positive', () => {
+    const store = useDocumentStore.getState();
+    store.setBlockAttrs('block-1', { lineHeight: 2.0 });
+    const block = useDocumentStore.getState().document.children[0] as any;
+    expect(block.attrs?.lineHeight).toBe(2.0);
+  });
+
+  it('rejects lineHeight of 0 and does not update attrs', () => {
+    const store = useDocumentStore.getState();
+    store.setBlockAttrs('block-1', { lineHeight: 0 });
+    const block = useDocumentStore.getState().document.children[0] as any;
+    expect(block.attrs?.lineHeight).toBeUndefined();
+  });
+
+  it('rejects negative lineHeight and does not update attrs', () => {
+    const store = useDocumentStore.getState();
+    store.setBlockAttrs('block-1', { lineHeight: -1 });
+    const block = useDocumentStore.getState().document.children[0] as any;
+    expect(block.attrs?.lineHeight).toBeUndefined();
+  });
+
+  it('allows setting lineHeight alongside textAlign', () => {
+    const store = useDocumentStore.getState();
+    store.setBlockAttrs('block-1', { lineHeight: 1.5, textAlign: 'center' });
+    const block = useDocumentStore.getState().document.children[0] as any;
+    expect(block.attrs?.lineHeight).toBe(1.5);
+    expect(block.attrs?.textAlign).toBe('center');
+  });
+});

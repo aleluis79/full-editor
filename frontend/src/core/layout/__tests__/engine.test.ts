@@ -97,3 +97,59 @@ describe('LayoutEngine basic', () => {
     expect(layout.blocks[0].lines.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('LayoutEngine per-block lineHeight', () => {
+  it('uses default lineHeight when block has no explicit lineHeight', () => {
+    const para = createParagraph('');
+    const doc = createDocument([para]);
+    const engine = new LayoutEngine();
+    const layout = engine.layoutDocument(doc);
+
+    // Default: fontSize (16) * lineHeight (1.5) = 24
+    expect(layout.blocks[0].height).toBe(24);
+  });
+
+  it('uses block attrs lineHeight in layoutParagraph', () => {
+    const para = createParagraph('');
+    para.attrs = { lineHeight: 2.0 };
+    const doc = createDocument([para]);
+    const engine = new LayoutEngine();
+    const layout = engine.layoutDocument(doc);
+
+    // fontSize (16) * attrs.lineHeight (2.0) = 32
+    expect(layout.blocks[0].height).toBe(32);
+  });
+
+  it('uses block attrs lineHeight in layoutHeading when set', () => {
+    const heading: import('../../types').Heading = {
+      id: 'h-1',
+      type: 'heading',
+      level: 1,
+      children: [{ id: 'run-1', type: 'text', content: 'Title', marks: [], attrs: {} }],
+      attrs: { lineHeight: 1.5 },
+    };
+    const doc = createDocument([heading]);
+    const engine = new LayoutEngine();
+    const layout = engine.layoutDocument(doc);
+
+    // Heading level 1: fontSize=32, lineHeight=1.5 → 48 per line
+    // One line: 32 * 1.5 = 48
+    expect(layout.blocks[0].height).toBe(48);
+  });
+
+  it('still uses hardcoded 1.2 for heading when no attrs lineHeight', () => {
+    const heading: import('../../types').Heading = {
+      id: 'h-2',
+      type: 'heading',
+      level: 1,
+      children: [{ id: 'run-1', type: 'text', content: 'Title', marks: [], attrs: {} }],
+    };
+    const doc = createDocument([heading]);
+    const engine = new LayoutEngine();
+    const layout = engine.layoutDocument(doc);
+
+    // Heading level 1: fontSize=32, default heading lineHeight=1.2 → 38.4 per line
+    // One line: 32 * 1.2 = 38.4
+    expect(layout.blocks[0].height).toBe(38.4);
+  });
+});

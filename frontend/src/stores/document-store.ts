@@ -890,6 +890,10 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
 
   setBlockAttrs: (blockId, attrs) => {
     const { document, history, historyIndex } = get();
+
+    // Validate lineHeight — must be positive
+    if (attrs.lineHeight !== undefined && attrs.lineHeight <= 0) return;
+
     const docClone = cloneDocument(document);
     const now = Date.now();
 
@@ -905,12 +909,18 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
 
     applySetBlockAttrs(docClone, op);
 
+    const parts: string[] = [];
+    if (attrs.textAlign) parts.push(`Align ${attrs.textAlign}`);
+    if (attrs.lineHeight) parts.push(`Line height ${attrs.lineHeight}`);
+    if (parts.length === 0) parts.push('Set block attrs');
+    const description = parts.join(', ');
+
     const entry: HistoryEntry = {
       id: `h-${now}`,
       timestamp: now,
       forward: [op],
       inverse: [invertOperation(op)],
-      description: attrs.textAlign ? `Align ${attrs.textAlign}` : 'Set block attrs',
+      description,
     };
 
     const newHistory = history.slice(0, historyIndex + 1);
@@ -930,6 +940,10 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
 
   setBlockAttrsRange: (startBlockId, endBlockId, attrs) => {
     const { document, history, historyIndex } = get();
+
+    // Validate lineHeight — must be positive
+    if (attrs.lineHeight !== undefined && attrs.lineHeight <= 0) return;
+
     const docClone = cloneDocument(document);
     const now = Date.now();
 
@@ -959,12 +973,18 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       applySetBlockAttrs(docClone, op as SetBlockAttrsOp);
     }
 
+    const parts: string[] = [];
+    if (attrs.textAlign) parts.push(`Align ${attrs.textAlign}`);
+    if (attrs.lineHeight) parts.push(`Line height ${attrs.lineHeight}`);
+    if (parts.length === 0) parts.push('Set block attrs');
+    const description = parts.join(', ') + (ops.length > 1 ? ` (${ops.length} blocks)` : '');
+
     const entry: HistoryEntry = {
       id: `h-${now}`,
       timestamp: now,
       forward: ops,
       inverse: ops.map((op) => invertOperation(op)),
-      description: ops.length > 1 ? `Align ${attrs.textAlign} (${ops.length} blocks)` : `Align ${attrs.textAlign}`,
+      description,
     };
 
     const newHistory = history.slice(0, historyIndex + 1);

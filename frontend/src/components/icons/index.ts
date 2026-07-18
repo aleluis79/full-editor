@@ -22,3 +22,4 @@ export { Plus } from './Plus';
 export { Delete } from './Delete';
 export { ColorPicker } from './ColorPicker';
 export { HighlightPicker } from './HighlightPicker';
+export { LineHeight } from './LineHeight';

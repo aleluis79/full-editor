@@ -152,8 +152,10 @@ export class LayoutEngine {
    */
   private layoutParagraph(paragraph: Paragraph, startY: number): BlockLayout {
     const runs = paragraph.children ?? [];
-    const lines = this.layoutTextRuns(runs, this.constraints);
-    const minHeight = this.constraints.fontSize * this.constraints.lineHeight;
+    const lineHeight = paragraph.attrs?.lineHeight ?? this.constraints.lineHeight;
+    const paraConstraints = { ...this.constraints, lineHeight };
+    const lines = this.layoutTextRuns(runs, paraConstraints);
+    const minHeight = this.constraints.fontSize * lineHeight;
     const totalHeight = Math.max(
       minHeight,
       lines.reduce((sum, line) => sum + line.height, 0)
@@ -178,7 +180,7 @@ export class LayoutEngine {
     const headingConstraints = {
       ...this.constraints,
       fontSize,
-      lineHeight: 1.2,
+      lineHeight: heading.attrs?.lineHeight ?? 1.2,
     };
 
     const runs = heading.children ?? [];
@@ -282,11 +284,11 @@ export class LayoutEngine {
    */
   private layoutTableCell(cell: TableCell, cellWidth: number): { width: number; height: number } {
     let totalHeight = 0;
-    // Each paragraph has min-height: 1.5em from CSS
-    const paraMinHeight = this.constraints.fontSize * this.constraints.lineHeight;
 
     for (const paragraph of cell.children) {
-      const cellConstraints = { ...this.constraints, width: cellWidth };
+      const lineHeight = paragraph.attrs?.lineHeight ?? this.constraints.lineHeight;
+      const paraMinHeight = this.constraints.fontSize * lineHeight;
+      const cellConstraints = { ...this.constraints, width: cellWidth, lineHeight };
       const lines = this.layoutTextRuns(paragraph.children, cellConstraints);
       const paragraphHeight = lines.reduce((sum, line) => sum + line.height, 0);
       totalHeight += Math.max(paraMinHeight, paragraphHeight);

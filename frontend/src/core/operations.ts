@@ -296,6 +296,11 @@ export function applySplitBlock(doc: DocumentRoot, op: SplitBlockOp): NodeId {
   const newParagraph = createParagraph('');
   newParagraph.children = newChildren;
 
+  // Preserve block-level attrs on split (e.g. lineHeight carries on Enter)
+  if (textBlock.attrs) {
+    newParagraph.attrs = { ...textBlock.attrs };
+  }
+
   // Check if paragraph is inside a list item — insert as new list item
   for (const top of doc.children) {
     if (top.type === 'list') {

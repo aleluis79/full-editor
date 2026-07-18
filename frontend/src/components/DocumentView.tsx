@@ -631,6 +631,7 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
         textAlign: block.attrs?.textAlign ?? 'left',
+        lineHeight: block.attrs?.lineHeight ?? undefined,
       }}
     >
       {renderTextContent()}
