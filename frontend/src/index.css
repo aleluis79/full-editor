@@ -466,7 +466,6 @@ body {
   cursor: text;
   min-height: 1.5em;
   position: relative;
-  max-width: calc(var(--page-width) - var(--page-margin) * 2);
   overflow-wrap: break-word;
   word-wrap: break-word;
   user-select: text;
@@ -920,6 +919,10 @@ body {
   left: 0;
 }
 
+.page-ruler-margin:hover {
+  background: #cbd5e1;
+}
+
 /* ============================================================
    Table Picker (grid selector popover)
    ============================================================ */
@@ -1015,6 +1018,124 @@ body {
 .line-spacing-item.active {
   background: #dbeafe;
   font-weight: 600;
+}
+
+/* ── Page Settings Popover ─────────────────────────────────── */
+
+.page-settings-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 220px;
+}
+
+.page-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.page-settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+}
+
+.page-settings-paper-group {
+  display: flex;
+  gap: 4px;
+}
+
+.page-settings-paper-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page-settings-paper-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.page-settings-paper-btn.active {
+  background: #dbeafe;
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.page-settings-orientation-group {
+  display: flex;
+  gap: 4px;
+}
+
+.page-settings-orientation-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page-settings-orientation-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.page-settings-orientation-btn.active {
+  background: #dbeafe;
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.page-settings-margins-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.page-settings-margin-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.page-settings-margin-field input {
+  width: 60px;
+  text-align: center;
+}
+
+.page-settings-margin-label {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
 }
 
 /* ============================================================

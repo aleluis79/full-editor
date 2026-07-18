@@ -1,5 +1,6 @@
 """PDF Export Service using ReportLab."""
 from reportlab.lib.pagesizes import A4, LETTER, LEGAL
+from reportlab.lib.pagesizes import landscape as rl_landscape
 from reportlab.lib.units import inch, mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
@@ -103,6 +104,7 @@ class PDFExporter:
         content: Dict[str, Any],
         filename: str = "document.pdf",
         paper_size: str = "A4",
+        orientation: str = "portrait",
         margins: Dict[str, float] = None,
         page_breaks: list[str] = None,
     ) -> bytes:
@@ -113,6 +115,7 @@ class PDFExporter:
             content: Document content dictionary
             filename: Output filename
             paper_size: Paper size (A4, LETTER, LEGAL)
+            orientation: Page orientation ('portrait' or 'landscape')
             margins: Margins in points {top, right, bottom, left}
             page_breaks: Block IDs where explicit page breaks should occur
         
@@ -124,16 +127,20 @@ class PDFExporter:
         if page_breaks is None:
             page_breaks = []
         
+        # Get page size — normalize to uppercase (frontend sends "Legal", keys are "LEGAL")
+        page_size = PAPER_SIZES.get(paper_size.upper(), A4)
+        
+        # Apply landscape if requested
+        if orientation == "landscape":
+            page_size = rl_landscape(page_size)
+        
         # Store page dimensions for child methods
-        self._page_width = PAPER_SIZES.get(paper_size, A4)[0]
+        self._page_width = page_size[0]
         self._left_margin = margins.get("left", 72)
         self._right_margin = margins.get("right", 72)
         
         # Create PDF in memory
         buffer = io.BytesIO()
-        
-        # Get page size
-        page_size = PAPER_SIZES.get(paper_size, A4)
         
         # Create document
         doc = SimpleDocTemplate(
@@ -345,6 +352,8 @@ class PDFExporter:
             runs = p.get("children", [])
             for run in runs:
                 content = run.get("content", "")
+                # Escape HTML entities BEFORE wrapping with formatting tags
+                content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 marks = run.get("marks", [])
                 attrs = run.get("attrs", {}) or {}
                 # Wrap in formatting tags
@@ -498,6 +507,9 @@ class PDFExporter:
             
             if child_type == "text":
                 content = child.get("content", "")
+                # Escape HTML entities BEFORE wrapping with formatting tags,
+                # otherwise bare "<" chars crash ReportLab's XML parser.
+                content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 marks = child.get("marks", [])
                 attrs = child.get("attrs", {}) or {}
                 

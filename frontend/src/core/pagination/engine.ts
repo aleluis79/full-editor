@@ -9,7 +9,7 @@ import type {
   PaginationResult,
   HeaderFooterConfig,
 } from './types';
-import { A4 } from './paper';
+import { A4, getOrientedSize } from './paper';
 
 /** Default margins (1 inch = 72 points) */
 export const DEFAULT_MARGINS = {
@@ -37,6 +37,7 @@ const DEFAULT_HEADER_FOOTER: HeaderFooterConfig = {
 /** Default pagination config */
 export const DEFAULT_PAGINATION_CONFIG: PaginationConfig = {
   paperSize: A4,
+  orientation: 'portrait',
   margins: DEFAULT_MARGINS,
   headerFooter: DEFAULT_HEADER_FOOTER,
 };
@@ -83,15 +84,16 @@ export class PaginationEngine {
    * Paginate blocks into pages
    */
   paginate(blocks: BlockLayout[]): PaginationResult {
-    const { paperSize, margins, headerFooter } = this.config;
+    const { paperSize, orientation, margins, headerFooter } = this.config;
+    const orientedSize = getOrientedSize(paperSize, orientation);
 
     // Calculate content area considering headers/footers
     const headerHeight = headerFooter.enabled ? headerFooter.header.height : 0;
     const footerHeight = headerFooter.enabled ? headerFooter.footer.height : 0;
 
-    const contentWidth = paperSize.width - margins.left - margins.right;
+    const contentWidth = orientedSize.width - margins.left - margins.right;
     const contentStartY = margins.top + headerHeight;
-    const contentEndY = paperSize.height - margins.bottom - footerHeight;
+    const contentEndY = orientedSize.height - margins.bottom - footerHeight;
     const contentHeight = contentEndY - contentStartY;
 
     const pages: Page[] = [];
@@ -107,7 +109,7 @@ export class PaginationEngine {
         // Create new page with current blocks
         pages.push(this.createPage(
           pageIndex,
-          paperSize,
+          orientedSize,
           margins,
           contentWidth,
           contentStartY,
@@ -133,7 +135,7 @@ export class PaginationEngine {
     if (currentPageBlocks.length > 0) {
       pages.push(this.createPage(
         pageIndex,
-        paperSize,
+        orientedSize,
         margins,
         contentWidth,
         contentStartY,
@@ -148,7 +150,7 @@ export class PaginationEngine {
     if (pages.length === 0) {
       pages.push(this.createPage(
         0,
-        paperSize,
+        orientedSize,
         margins,
         contentWidth,
         contentStartY,

@@ -9,6 +9,17 @@
 
 import type { PaperSize } from './types';
 
+/**
+ * Get effective page dimensions considering orientation.
+ * Landscape swaps width and height.
+ */
+export function getOrientedSize(paperSize: PaperSize, orientation: 'portrait' | 'landscape'): { width: number; height: number } {
+  if (orientation === 'landscape') {
+    return { width: paperSize.height, height: paperSize.width };
+  }
+  return { width: paperSize.width, height: paperSize.height };
+}
+
 /** A4 — 210mm x 297mm (794 x 1123px at 96dpi) */
 export const A4: PaperSize = {
   name: 'A4',

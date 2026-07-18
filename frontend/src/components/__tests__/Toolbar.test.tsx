@@ -19,11 +19,13 @@ vi.mock('../../api/client', () => ({
 // Mock page store
 vi.mock('../../stores/page-store', () => ({
   usePageStore: create(() => ({
-    config: { paperSize: { name: 'A4', width: 595, height: 842 }, margins: { top: 72, right: 72, bottom: 72, left: 72 } },
+    config: { paperSize: { name: 'A4', width: 595, height: 842 }, orientation: 'portrait', margins: { top: 96, right: 96, bottom: 96, left: 96 }, headerFooter: { enabled: false, firstPageDifferent: true, header: { runs: [], height: 36 }, footer: { runs: [], height: 36 }, pageNumberPosition: 'bottom-center' } },
     pages: [],
-    availablePaperSizes: [{ name: 'A4', width: 595, height: 842 }],
+    availablePaperSizes: [{ name: 'A4', width: 794, height: 1123 }, { name: 'Letter', width: 816, height: 1056 }, { name: 'Legal', width: 816, height: 1344 }],
     paginate: vi.fn(),
     updatePaperSize: vi.fn(),
+    updateOrientation: vi.fn(),
+    updateMargins: vi.fn(),
   })),
 }));
 
@@ -233,5 +235,61 @@ describe('Toolbar line spacing popup', () => {
     // The active preset should have a special class
     const preset2 = screen.getByText('2.0');
     expect(preset2.className).toContain('active');
+  });
+});
+
+describe('Toolbar page settings gear button', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [
+          {
+            id: 'block-1',
+            type: 'paragraph',
+            children: [{ id: 'run-1', type: 'text', content: '', marks: [], attrs: {} }],
+            attrs: {},
+          },
+        ],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+      isDirty: false,
+      isSaving: false,
+      documentTitle: 'Test',
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: 'block-1', offset: 0 });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('renders a gear/settings button in the toolbar', () => {
+    render(<Toolbar />);
+    const buttons = screen.getAllByRole('button');
+    const gearBtn = buttons.find(
+      (btn) => btn.getAttribute('title') === 'Page settings',
+    );
+    expect(gearBtn).toBeTruthy();
+  });
+
+  it('opens page settings popup on gear button click', () => {
+    render(<Toolbar />);
+    const buttons = screen.getAllByRole('button');
+    const gearBtn = buttons.find(
+      (btn) => btn.getAttribute('title') === 'Page settings',
+    )!;
+    fireEvent.click(gearBtn);
+
+    // After clicking, the popup should show paper size controls
+    expect(screen.getByText('A4')).toBeTruthy();
+    expect(screen.getByText('Letter')).toBeTruthy();
   });
 });

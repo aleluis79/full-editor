@@ -75,6 +75,7 @@ export interface Page {
 /** Pagination configuration */
 export interface PaginationConfig {
   paperSize: PaperSize;
+  orientation: 'portrait' | 'landscape';
   margins: Margins;
   headerFooter: HeaderFooterConfig;
 }

@@ -27,7 +27,9 @@ import {
   Pdf,
   Back,
   LineHeight,
+  Settings,
 } from './icons';
+import { PageSettingsPopup } from './PageSettingsPopup';
 
 const FONT_FAMILIES = [
   'Georgia',
@@ -134,6 +136,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const [showBlockPicker, setShowBlockPicker] = useState(false);
   const blockPickerRef = useRef<HTMLDivElement>(null);
 
+  // ── Page settings popup state ──────────────────────────────────
+  const [showPageSettings, setShowPageSettings] = useState(false);
+  const pageSettingsRef = useRef<HTMLDivElement>(null);
+
   // ── Line spacing popup state ──────────────────────────────────
   const LINE_SPACING_PRESETS = [1.0, 1.15, 1.5, 2.0, 2.5, 3.0] as const;
   const [showLineSpacing, setShowLineSpacing] = useState(false);
@@ -205,6 +211,18 @@ export function Toolbar({ onBack }: ToolbarProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showBlockPicker]);
+
+  // Close page settings popup on outside click
+  useEffect(() => {
+    if (!showPageSettings) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pageSettingsRef.current && !pageSettingsRef.current.contains(e.target as Node)) {
+        setShowPageSettings(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPageSettings]);
 
   // Close line spacing popup on outside click
   useEffect(() => {
@@ -425,19 +443,21 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const handleExportPDF = useCallback(async () => {
     const { document, documentTitle } = useDocumentStore.getState();
     try {
-      const { pages } = usePageStore.getState();
-      const breakIds: string[] = [];
-      for (let i = 1; i < pages.length; i++) {
-        const prevPageBlocks = pages[i - 1].blocks;
-        if (prevPageBlocks.length > 0) {
-          const lastBlock = prevPageBlocks[prevPageBlocks.length - 1];
-          breakIds.push(lastBlock.blockId);
-        }
-      }
+      const { paperSize, margins, orientation } = usePageStore.getState().config;
 
       const content = { children: document.children };
       const filename = `${documentTitle.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-      await exportPDF({ content, page_breaks: breakIds }, filename);
+      await exportPDF({
+        content,
+        paper_size: paperSize.name,
+        orientation,
+        margins: {
+          top: margins.top * 72 / 96,
+          right: margins.right * 72 / 96,
+          bottom: margins.bottom * 72 / 96,
+          left: margins.left * 72 / 96,
+        },
+      }, filename);
     } catch (err) {
       console.error('PDF export failed:', err);
     }
@@ -603,26 +623,20 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Paper size */}
-      <div className="toolbar-group">
-        <select
-          className="toolbar-select toolbar-select-small"
-          value={pageConfig.paperSize.name}
-          onChange={(e) => {
-            const ps = availablePaperSizes.find((p) => p.name === e.target.value);
-            if (ps) {
-              updatePaperSize(ps);
-              calculateLayout(doc);
-              markDirty();
-            }
-          }}
-          title="Tamaño de página"
-        >
-          {availablePaperSizes.map((ps) => (
-            <option key={ps.name} value={ps.name}>{ps.name}</option>
-          ))}
-        </select>
-      </div>
+      {currentDocId && (
+        <div className="toolbar-group" style={{ position: 'relative' }}>
+          <button
+            className="toolbar-btn"
+            onClick={() => setShowPageSettings(!showPageSettings)}
+            title="Page settings"
+          >
+            <Settings />
+          </button>
+          {showPageSettings && (
+            <PageSettingsPopup onClose={() => setShowPageSettings(false)} />
+          )}
+        </div>
+      )}
 
       <div className="toolbar-separator" />
 

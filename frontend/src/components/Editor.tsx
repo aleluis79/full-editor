@@ -81,6 +81,8 @@ export function Editor({ onBack }: EditorProps) {
   const calculateLayout = useLayoutStore((s) => s.calculateLayout);
   const layout = useLayoutStore((s) => s.layout);
   const paginate = usePageStore((s) => s.paginate);
+  const pages = usePageStore((s) => s.pages);
+  const pageWidth = pages[0]?.width ?? 816;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1237,6 +1239,7 @@ export function Editor({ onBack }: EditorProps) {
     <div
       className="editor"
       ref={containerRef}
+      style={{ width: pageWidth }}
       onMouseDown={() => useEditorStore.getState().selectTable(null)}
     >
       <Toolbar onBack={onBack} />

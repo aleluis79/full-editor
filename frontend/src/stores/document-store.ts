@@ -168,6 +168,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
         blocks: [createParagraph('')],
         config: {
           paperSize: pageConfig.paperSize,
+          orientation: pageConfig.orientation,
           margins: pageConfig.margins,
         },
       };
@@ -200,6 +201,14 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       if (savedConfig?.paperSize && savedConfig?.margins) {
         usePageStore.getState().updatePaperSize(savedConfig.paperSize as any);
       }
+      // Restore orientation (default to 'portrait' if missing)
+      if (savedConfig?.orientation) {
+        usePageStore.getState().updateOrientation(savedConfig.orientation as 'portrait' | 'landscape');
+      }
+      // Restore margins (triggers layout recalc with correct content width)
+      if (savedConfig?.margins) {
+        usePageStore.getState().updateMargins(savedConfig.margins as any);
+      }
 
       set({
         currentDocId: doc.id,
@@ -228,6 +237,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
         blocks: document.children,
         config: {
           paperSize: pageConfig.paperSize,
+          orientation: pageConfig.orientation,
           margins: pageConfig.margins,
         },
       };

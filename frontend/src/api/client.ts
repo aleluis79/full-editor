@@ -122,6 +122,7 @@ export async function uploadImage(file: File): Promise<string> {
 export interface ExportPDFData {
   content: Record<string, unknown>;
   paper_size?: string;
+  orientation?: string;
   margins?: { top: number; right: number; bottom: number; left: number };
   page_breaks?: string[];
 }

@@ -6,14 +6,27 @@ import { uploadImage } from '../../api/client';
 // Mock the API client
 vi.mock('../../api/client', () => ({
   uploadImage: vi.fn(),
+  createDocument: vi.fn(),
+  updateDocument: vi.fn(),
+  fetchDocument: vi.fn(),
+  fetchDocuments: vi.fn(),
+  deleteDocument: vi.fn(),
+  exportPDF: vi.fn(),
 }));
+
+// Shared mock functions for page-store
+const mockUpdatePaperSize = vi.fn();
+const mockUpdateOrientation = vi.fn();
+const mockUpdateMargins = vi.fn();
 
 // Mock the page-store so newDocument doesn't fail
 vi.mock('../page-store', () => ({
   usePageStore: {
     getState: () => ({
-      config: { paperSize: { name: 'A4' }, margins: { top: 72, right: 72, bottom: 72, left: 72 } },
-      updatePaperSize: vi.fn(),
+      config: { paperSize: { name: 'A4', width: 794, height: 1123 }, margins: { top: 72, right: 72, bottom: 72, left: 72 }, orientation: 'portrait' },
+      updatePaperSize: mockUpdatePaperSize,
+      updateOrientation: mockUpdateOrientation,
+      updateMargins: mockUpdateMargins,
     }),
   },
 }));
@@ -167,5 +180,90 @@ describe('document-store setBlockAttrs lineHeight', () => {
     const block = useDocumentStore.getState().document.children[0] as any;
     expect(block.attrs?.lineHeight).toBe(1.5);
     expect(block.attrs?.textAlign).toBe('center');
+  });
+});
+
+describe('document-store orientation save/load', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('saveDocument includes orientation in content.config', async () => {
+    // Setup store with orientation
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [{ id: 'block-1', type: 'paragraph', children: [{ id: 'run-1', type: 'text', content: '', marks: [], attrs: {} }], attrs: {} }],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+      isDirty: true,
+      isSaving: false,
+      documentTitle: 'Test',
+    });
+
+    // Set page-store orientation
+    const mockUpdateDoc = (await import('../../api/client')).updateDocument as ReturnType<typeof vi.fn>;
+    mockUpdateDoc.mockResolvedValue({});
+
+    await useDocumentStore.getState().saveDocument();
+
+    expect(mockUpdateDoc).toHaveBeenCalled();
+    const callArg = mockUpdateDoc.mock.calls[0][1];
+    expect(callArg.content.config.orientation).toBe('portrait');
+  });
+
+  it('loadDocument with orientation in config restores it', async () => {
+    const mockFetchDoc = (await import('../../api/client')).fetchDocument as ReturnType<typeof vi.fn>;
+    mockFetchDoc.mockResolvedValue({
+      id: 'doc-1',
+      title: 'Test',
+      content: {
+        blocks: [{ id: 'b1', type: 'paragraph', children: [{ id: 'r1', type: 'text', content: 'Hello', marks: [], attrs: {} }], attrs: {} }],
+        config: {
+          paperSize: { name: 'Letter', width: 816, height: 1056 },
+          margins: { top: 96, right: 96, bottom: 96, left: 96 },
+          orientation: 'landscape',
+        },
+      },
+      created_at: '2024-01-01T00:00:00',
+      updated_at: '2024-01-01T00:00:00',
+    });
+
+    await useDocumentStore.getState().loadDocument('doc-1');
+
+    expect(mockUpdatePaperSize).toHaveBeenCalled();
+    expect(mockUpdateOrientation).toHaveBeenCalledWith('landscape');
+  });
+
+  it('loadDocument without orientation defaults to portrait', async () => {
+    const mockFetchDoc = (await import('../../api/client')).fetchDocument as ReturnType<typeof vi.fn>;
+    mockFetchDoc.mockResolvedValue({
+      id: 'doc-2',
+      title: 'No Orient',
+      content: {
+        blocks: [{ id: 'b1', type: 'paragraph', children: [{ id: 'r1', type: 'text', content: '', marks: [], attrs: {} }], attrs: {} }],
+        config: {
+          paperSize: { name: 'A4', width: 794, height: 1123 },
+          margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        },
+      },
+      created_at: '2024-01-01T00:00:00',
+      updated_at: '2024-01-01T00:00:00',
+    });
+
+    await useDocumentStore.getState().loadDocument('doc-2');
+
+    // updatePaperSize should be called (paperSize present)
+    expect(mockUpdatePaperSize).toHaveBeenCalled();
+    // But updateOrientation should NOT be called (no orientation in config)
+    // because the default is applied by the engine's DEFAULT_PAGINATION_CONFIG
   });
 });

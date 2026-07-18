@@ -9,7 +9,9 @@ import type {
   PageNumberPosition,
 } from '../core/pagination/types';
 import { PaginationEngine } from '../core/pagination/engine';
+import { getOrientedSize } from '../core/pagination/paper';
 import { useLayoutStore } from './layout-store';
+import { useDocumentStore } from './document-store';
 
 // ============================================================
 // A4 at 96dpi: 794 x 1123px, 1 inch margins = 96px
@@ -32,6 +34,7 @@ interface PageState {
   paginate: (layout: DocumentLayout) => void;
   getPage: (index: number) => Page | undefined;
   updatePaperSize: (paperSize: PaperSize) => void;
+  updateOrientation: (orientation: 'portrait' | 'landscape') => void;
   updateMargins: (margins: Partial<Margins>) => void;
   updateHeaderFooter: (config: Partial<HeaderFooterConfig>) => void;
   updatePageNumberPosition: (position: PageNumberPosition) => void;
@@ -48,6 +51,7 @@ export const usePageStore = create<PageState>((set, get) => ({
   totalPages: 0,
   config: {
     paperSize: { ...DEFAULT_PAPER },
+    orientation: 'portrait',
     margins: { ...DEFAULT_MARGINS },
     headerFooter: {
       enabled: false,
@@ -78,26 +82,78 @@ export const usePageStore = create<PageState>((set, get) => ({
   },
 
   updatePaperSize: (paperSize) => {
-    const { engine, config } = get();
+    const { engine, config, paginate } = get();
     engine.updateConfig({ paperSize });
 
-    // Sync layout constraints width to match new content width
-    const contentWidth = paperSize.width - config.margins.left - config.margins.right;
+    // Sync layout constraints width to match new content width using oriented dims
+    const orientedSize = getOrientedSize(paperSize, config.orientation);
+    const contentWidth = orientedSize.width - config.margins.left - config.margins.right;
     useLayoutStore.getState().updateConstraints({ width: contentWidth });
 
     set({ config: engine.getConfig() });
+
+    // Recalculate layout & pagination so the page view reflects the new size
+    const doc = useDocumentStore.getState().document;
+    useLayoutStore.getState().calculateLayout(doc);
+    // Re-read layout after calculateLayout updates the store (Zustand returns new state object)
+    const freshLayout = useLayoutStore.getState().layout;
+    if (freshLayout) paginate(freshLayout);
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
+  },
+
+  updateOrientation: (orientation) => {
+    const { engine, paginate } = get();
+    engine.updateConfig({ orientation });
+
+    // Use oriented dimensions to sync layout constraints
+    const newConfig = engine.getConfig();
+    const orientedSize = getOrientedSize(newConfig.paperSize, orientation);
+    const contentWidth = orientedSize.width - newConfig.margins.left - newConfig.margins.right;
+    useLayoutStore.getState().updateConstraints({ width: contentWidth });
+
+    set({ config: engine.getConfig() });
+
+    // Recalculate layout & pagination so the page view reflects the new orientation
+    const doc = useDocumentStore.getState().document;
+    useLayoutStore.getState().calculateLayout(doc);
+    // Re-read layout after calculateLayout updates the store (Zustand returns new state object)
+    const freshLayout = useLayoutStore.getState().layout;
+    if (freshLayout) paginate(freshLayout);
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
   },
 
   updateMargins: (margins) => {
-    const { engine, config } = get();
+    const { engine, config, paginate } = get();
+    // Clamp negative values to 0
+    const clamped = { ...margins };
+    for (const key of Object.keys(clamped) as (keyof Margins)[]) {
+      if (clamped[key] !== undefined && clamped[key]! < 0) {
+        clamped[key] = 0;
+      }
+    }
     engine.updateConfig({
-      margins: { ...config.margins, ...margins },
+      margins: { ...config.margins, ...clamped },
     });
     // Re-sync width when margins change
     const newConfig = engine.getConfig();
-    const contentWidth = newConfig.paperSize.width - newConfig.margins.left - newConfig.margins.right;
+    const orientedSize = getOrientedSize(newConfig.paperSize, newConfig.orientation);
+    const contentWidth = orientedSize.width - newConfig.margins.left - newConfig.margins.right;
     useLayoutStore.getState().updateConstraints({ width: contentWidth });
     set({ config: newConfig });
+
+    // Recalculate layout & pagination so the page view reflects the new margins
+    const doc = useDocumentStore.getState().document;
+    useLayoutStore.getState().calculateLayout(doc);
+    // Re-read layout after calculateLayout updates the store (Zustand returns new state object)
+    const freshLayout = useLayoutStore.getState().layout;
+    if (freshLayout) paginate(freshLayout);
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
   },
 
   updateHeaderFooter: (hfConfig) => {

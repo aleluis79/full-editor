@@ -17,6 +17,7 @@ class ExportRequest(BaseModel):
     """Request for PDF export."""
     content: dict
     paper_size: str = "A4"
+    orientation: str = "portrait"
     margins: dict = {"top": 72, "right": 72, "bottom": 72, "left": 72}
     page_breaks: list[str] = []  # block IDs where page breaks should occur
 
@@ -73,6 +74,7 @@ def export_pdf(request: ExportRequest):
         pdf_bytes = exporter.export(
             content=request.content,
             paper_size=request.paper_size,
+            orientation=request.orientation,
             margins=request.margins,
             page_breaks=request.page_breaks,
         )

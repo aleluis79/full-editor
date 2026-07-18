@@ -156,6 +156,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
           width: page.contentArea.width,
           height: page.contentArea.height,
           padding: 0,
+          minHeight: 0,
         }}
       >
         {page.blocks.map((blockLayout) => {
@@ -684,6 +685,10 @@ interface PageRulerProps {
 }
 
 function PageRuler({ pageWidth, contentArea }: PageRulerProps) {
+  const updateMargins = usePageStore((s) => s.updateMargins);
+  const margins = usePageStore((s) => s.config.margins);
+  const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
+
   const ticks: { pos: number; label: string; major: boolean }[] = [];
   for (let px = 0; px <= pageWidth; px += 10) {
     if (px % 50 === 0) {
@@ -692,6 +697,54 @@ function PageRuler({ pageWidth, contentArea }: PageRulerProps) {
       ticks.push({ pos: px, label: '', major: false });
     }
   }
+
+  // Track drag on document level for smooth movement outside the ruler
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // e.clientX is relative to the viewport; we need position relative to the ruler
+      const rulerEl = document.querySelector('.page-ruler');
+      if (!rulerEl) return;
+      const rulerRect = rulerEl.getBoundingClientRect();
+      const px = e.clientX - rulerRect.left;
+      // Clamp to [0, pageWidth]
+      const clampedPx = Math.max(0, Math.min(pageWidth, px));
+
+      if (dragging === 'left') {
+        // Left margin: the pixel position directly is the margin width in CSS px
+        const newLeft = Math.round(clampedPx);
+        updateMargins({ left: newLeft });
+        useDocumentStore.getState().markDirty();
+      } else {
+        // Right margin: pixel from left edge → right margin = pageWidth - px
+        const newRight = Math.round(pageWidth - clampedPx);
+        updateMargins({ right: newRight });
+        useDocumentStore.getState().markDirty();
+      }
+    };
+
+    const handleMouseUp = () => {
+      setDragging(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, pageWidth, updateMargins, margins]);
+
+  const handleMarginMouseDown = (side: 'left' | 'right') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(side);
+  };
+
+  const leftWidth = contentArea.x;
+  const rightLeft = contentArea.x + contentArea.width;
+  const rightWidth = pageWidth - rightLeft;
 
   return (
     <div className="page-ruler" style={{ width: pageWidth }}>
@@ -706,15 +759,29 @@ function PageRuler({ pageWidth, contentArea }: PageRulerProps) {
           </div>
         ))}
       </div>
-      {/* Margin overlay */}
+      {/* Left margin — draggable */}
       <div
         className="page-ruler-margin page-ruler-margin-left"
-        style={{ width: contentArea.x, height: '100%' }}
-      />
+        style={{ width: leftWidth, cursor: 'ew-resize' }}
+        onMouseDown={handleMarginMouseDown('left')}
+      >
+        <div className="page-ruler-drag-handle" style={{ position: 'absolute', right: -3, width: 6, height: '100%', cursor: 'ew-resize' }} />
+      </div>
+      {/* Right margin — draggable */}
       <div
         className="page-ruler-margin page-ruler-margin-right"
-        style={{ left: contentArea.x + contentArea.width, width: pageWidth - contentArea.x - contentArea.width, height: '100%' }}
-      />
+        style={{ left: rightLeft, width: rightWidth, cursor: 'ew-resize' }}
+        onMouseDown={handleMarginMouseDown('right')}
+      >
+        <div className="page-ruler-drag-handle" style={{ position: 'absolute', left: -3, width: 6, height: '100%', cursor: 'ew-resize' }} />
+      </div>
+      {/* Drag indicator line shown while dragging */}
+      {dragging === 'left' && (
+        <div style={{ position: 'absolute', left: leftWidth, top: 0, width: 1, height: '100%', background: 'var(--color-accent)', zIndex: 10, pointerEvents: 'none' }} />
+      )}
+      {dragging === 'right' && (
+        <div style={{ position: 'absolute', left: rightLeft, top: 0, width: 1, height: '100%', background: 'var(--color-accent)', zIndex: 10, pointerEvents: 'none' }} />
+      )}
     </div>
   );
 }
