@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .api.documents import router as documents_router
 from .api.images import router as images_router
+from .api.auth import router as auth_router
+from .api.shares import router as shares_router
 
 
 app = FastAPI(
@@ -12,10 +14,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS middleware for frontend
+# CORS middleware for frontend and Keycloak origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,6 +30,8 @@ app.add_middleware(
 # Include routers
 app.include_router(documents_router)
 app.include_router(images_router, prefix="/api")
+app.include_router(auth_router)
+app.include_router(shares_router)
 
 # Mount uploads directory as static files
 from pathlib import Path  # noqa: E402

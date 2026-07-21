@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime
+from sqlalchemy import String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.database import Base
@@ -25,6 +25,7 @@ class DocumentModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_generate_id)
     title: Mapped[str] = mapped_column(String(255), default="Untitled Document")
     content: Mapped[str] = mapped_column(Text, default="{}")
+    owner_id = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 

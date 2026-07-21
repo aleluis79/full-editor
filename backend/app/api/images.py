@@ -6,16 +6,21 @@ type/extension/size, saves with UUID filename, returns URL path.
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from ..config import ALLOWED_EXTENSIONS, ALLOWED_MIMETYPES, MAX_UPLOAD_SIZE, UPLOAD_DIR
+from ..core.auth import get_current_user
+from ..models.user import UserModel
 
 
 router = APIRouter()
 
 
 @router.post("/images/upload", status_code=status.HTTP_201_CREATED)
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(
+    file: UploadFile = File(...),
+    user: UserModel = Depends(get_current_user),
+):
     """Upload an image file.
 
     Validates:

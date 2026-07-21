@@ -6,6 +6,7 @@
 .PHONY: db-start db-stop
 .PHONY: frontend-build backend-migrate frontend-test backend-test test
 .PHONY: frontend-lint backend-lint lint frontend-clean backend-clean clean
+.PHONY: keycloak-start keycloak-stop keycloak-recreate keycloak-logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -111,5 +112,20 @@ frontend-clean: ## Remove frontend build artifacts
 backend-clean: ## Remove Python cache files
 	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find backend -type f -name '*.pyc' -delete
+
+# ── Keycloak ──────────────────────────────────────────────────
+
+keycloak-start: ## Start Keycloak + Keycloak DB containers
+	docker compose up -d keycloak-db keycloak
+
+keycloak-stop: ## Stop and remove Keycloak + Keycloak DB containers
+	docker compose down
+
+keycloak-recreate: ## Force-recreate Keycloak containers (picks up config changes)
+	docker compose down -v
+	docker compose up -d keycloak-db keycloak
+
+keycloak-logs: ## Show logs from the Keycloak container
+	docker compose logs -f keycloak
 
 clean: frontend-clean backend-clean ## Remove all build artifacts and caches

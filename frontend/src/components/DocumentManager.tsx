@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import { fetchDocuments, deleteDocument, createDocument, type DocumentData } from '../api/client';
+import {
+  fetchDocuments,
+  deleteDocument,
+  createDocument,
+  fetchSharedWithMe,
+  type DocumentData,
+  type SharedWithMeDocument,
+} from '../api/client';
 import { Delete } from './icons';
 
 interface DocumentManagerProps {
@@ -9,6 +16,7 @@ interface DocumentManagerProps {
 
 export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentManagerProps) {
   const [documents, setDocuments] = useState<DocumentData[]>([]);
+  const [sharedDocs, setSharedDocs] = useState<SharedWithMeDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,8 +24,12 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
     setLoading(true);
     setError(null);
     try {
-      const docs = await fetchDocuments();
+      const [docs, shared] = await Promise.all([
+        fetchDocuments(),
+        fetchSharedWithMe(),
+      ]);
       setDocuments(docs);
+      setSharedDocs(shared);
     } catch (err) {
       setError('No se pudieron cargar los documentos');
     } finally {
@@ -78,35 +90,65 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
 
       {error && <div className="doc-manager-error">{error}</div>}
 
-      {documents.length === 0 && !error ? (
-        <div className="doc-manager-empty">
-          <p>No tenés documentos todavía.</p>
-          <p>Creá uno nuevo para empezar a escribir.</p>
-        </div>
-      ) : (
-        <div className="doc-manager-list">
-          {documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="doc-manager-item"
-              onClick={() => onOpenDocument(doc.id)}
-            >
-              <div className="doc-manager-item-info">
-                <span className="doc-manager-item-title">{doc.title}</span>
-                <span className="doc-manager-item-date">
-                  Última modificación: {formatDate(doc.updated_at)}
-                </span>
-              </div>
-              <button
-                className="doc-manager-item-delete"
-                onClick={(e) => handleDelete(doc.id, e)}
-                title="Eliminar documento"
+      {/* My documents */}
+      <section className="doc-manager-section">
+        <h2 className="doc-manager-section-title">My documents</h2>
+        {documents.length === 0 ? (
+          <div className="doc-manager-empty">
+            <p>No tenés documentos todavía.</p>
+            <p>Creá uno nuevo para empezar a escribir.</p>
+          </div>
+        ) : (
+          <div className="doc-manager-list">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="doc-manager-item"
+                onClick={() => onOpenDocument(doc.id)}
               >
-                <Delete size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
+                <div className="doc-manager-item-info">
+                  <span className="doc-manager-item-title">{doc.title}</span>
+                  <span className="doc-manager-item-date">
+                    Última modificación: {formatDate(doc.updated_at)}
+                  </span>
+                </div>
+                <button
+                  className="doc-manager-item-delete"
+                  onClick={(e) => handleDelete(doc.id, e)}
+                  title="Eliminar documento"
+                >
+                  <Delete size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Shared with me */}
+      {sharedDocs.length > 0 && (
+        <section className="doc-manager-section">
+          <h2 className="doc-manager-section-title">Shared with me</h2>
+          <div className="doc-manager-list">
+            {sharedDocs.map((sd) => (
+              <div
+                key={sd.id}
+                className="doc-manager-item"
+                onClick={() => onOpenDocument(sd.document_id)}
+              >
+                <div className="doc-manager-item-info">
+                  <span className="doc-manager-item-title">{sd.title}</span>
+                  <span className="doc-manager-item-date">
+                    Shared by {sd.shared_by_display_name} · {sd.permission === 'write' ? 'Can edit' : 'Can read'}
+                  </span>
+                </div>
+                <div className="doc-manager-item-shared-badge">
+                  {sd.permission === 'write' ? 'Edit' : 'View'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
