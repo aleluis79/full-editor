@@ -24,3 +24,4 @@ export { ColorPicker } from './ColorPicker';
 export { HighlightPicker } from './HighlightPicker';
 export { LineHeight } from './LineHeight';
 export { Settings } from './Settings';
+export { Comment } from './Comment';
