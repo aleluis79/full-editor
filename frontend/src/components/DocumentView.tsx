@@ -13,6 +13,8 @@ import { BlockquoteBlock } from './BlockquoteBlock';
 import { HorizontalRuleBlock } from './HorizontalRuleBlock';
 import { ImageBlock } from './ImageBlock';
 import { TableBlock } from './TableBlock';
+import { CommentIndicator } from './CommentIndicator';
+import { useCommentStore } from '../stores/comment-store';
 
 interface DocumentViewProps {
   blocks: BlockNode[];
@@ -108,6 +110,23 @@ interface PageRendererProps {
 }
 
 function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockClick, onDoubleClick, onTripleClick, getBlockLayout: _getBlockLayout, headerFooter, isVirtualized }: PageRendererProps) {
+  // Comment indicators
+  const commentVisible = useCommentStore((s) => s.visible);
+  const commentData = useCommentStore((s) => s.comments);
+  const commentActiveBlock = useCommentStore((s) => s.activeBlockId);
+  const setActiveBlock = useCommentStore((s) => s.setActiveBlock);
+
+  // Build a map of block_id → comments
+  const commentsByBlock = new Map<string, typeof commentData>();
+  for (const c of commentData) {
+    const existing = commentsByBlock.get(c.block_id);
+    if (existing) {
+      existing.push(c);
+    } else {
+      commentsByBlock.set(c.block_id, [c]);
+    }
+  }
+
   if (isVirtualized) {
     // Render placeholder with correct height
     return (
@@ -126,6 +145,7 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
     <div
       className="page"
       style={{
+        position: 'relative',
         width: page.width,
         height: page.height,
         marginBottom: 20,
@@ -207,6 +227,49 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
             </div>
           );
         })}
+
+      </div>
+
+      {/* Comment indicators in right gutter */}
+      {commentVisible && (
+        <div
+          className="comment-gutter"
+          style={{
+            position: 'absolute',
+            top: page.contentArea.y,
+            left: page.contentArea.x + page.contentArea.width + 4,
+            width: 28,
+            height: page.contentArea.height,
+          }}
+        >
+          {Array.from(commentsByBlock.entries()).map(([blockId, blockComments]) => {
+            const bl = page.blocks.find((b) => b.blockId === blockId);
+            if (!bl) return null;
+            return (
+              <div
+                key={blockId}
+                style={{
+                  position: 'absolute',
+                  top: bl.y,
+                  left: 0,
+                  width: 28,
+                  height: 24,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CommentIndicator
+                  blockId={blockId}
+                  comments={blockComments}
+                  activeBlockId={commentActiveBlock}
+                  onClick={setActiveBlock}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
       </div>
 
       {/* Footer with page number */}

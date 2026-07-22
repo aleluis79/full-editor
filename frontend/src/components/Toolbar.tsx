@@ -6,6 +6,7 @@ import { getRunStylesAtOffset, findNode, getBlockNodes } from '../core/document'
 import { exportPDF } from '../api/client';
 import { usePageStore } from '../stores/page-store';
 import { useLayoutStore } from '../stores/layout-store';
+import { useCommentStore } from '../stores/comment-store';
 import type { MarkType, StyleAttrs, BlockType, Paragraph, Heading } from '../core/types';
 import {
   Bold,
@@ -28,6 +29,7 @@ import {
   Back,
   LineHeight,
   Settings,
+  Comment,
 } from './icons';
 import { PageSettingsPopup } from './PageSettingsPopup';
 import { ShareDialog } from './ShareDialog';
@@ -95,6 +97,11 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const [linkUrl, setLinkUrl] = useState('');
 
   // ── Share dialog state ─────────────────────────────────────
+  const commentVisible = useCommentStore((s) => s.visible);
+  const toggleCommentVisibility = useCommentStore((s) => s.toggleVisibility);
+  const fetchComments = useCommentStore((s) => s.fetchComments);
+  const currentDocIdFromStore = useDocumentStore((s) => s.currentDocId);
+
   const [showShareDialog, setShowShareDialog] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
   // Save the selection range when the link button is clicked, so
@@ -635,6 +642,20 @@ export function Toolbar({ onBack }: ToolbarProps) {
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
           </button>
+          {currentDocIdFromStore && (
+            <button
+              className={`toolbar-btn${commentVisible ? ' toolbar-btn-active' : ''}`}
+              onClick={() => {
+                toggleCommentVisibility();
+                if (!commentVisible && currentDocIdFromStore) {
+                  fetchComments(currentDocIdFromStore);
+                }
+              }}
+              title="Toggle comments"
+            >
+              <Comment />
+            </button>
+          )}
         </div>
       )}
 

@@ -16,6 +16,8 @@ import { getOffsetFromPoint, getPointFromOffset, hitTest, nodeToLogicalPosition 
 import { DocumentView } from './DocumentView';
 import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
+import { CommentSidebar } from './CommentSidebar';
+import { useCommentStore } from '../stores/comment-store';
 import type { Table, DocumentRoot, Paragraph as ParagraphType, Heading as HeadingType } from '../core/types';
 
 /** Walk the document tree to find if a nodeId lives inside a table cell. */
@@ -1193,6 +1195,16 @@ export function Editor({ onBack }: EditorProps) {
     return () => cancelAnimationFrame(raf);
   }, [cursor.position, focused]);
 
+  // Fetch comments when document loads
+  const currentDocId = useDocumentStore((s) => s.currentDocId);
+  const fetchComments = useCommentStore((s) => s.fetchComments);
+
+  useEffect(() => {
+    if (currentDocId) {
+      fetchComments(currentDocId);
+    }
+  }, [currentDocId, fetchComments]);
+
   // Sync browser native selection to editor state — without this, text
   // selected by mouse drag is invisible to the toolbar and keyboard
   // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
@@ -1235,11 +1247,13 @@ export function Editor({ onBack }: EditorProps) {
     return () => document.removeEventListener('selectionchange', handler);
   }, [setCursorPosition, setSelection, clearSelection]);
 
+  const commentVisible = useCommentStore((s) => s.visible);
+
   return (
     <div
       className="editor"
       ref={containerRef}
-      style={{ width: pageWidth }}
+      style={{ width: commentVisible ? pageWidth : pageWidth }}
       onMouseDown={() => useEditorStore.getState().selectTable(null)}
     >
       <Toolbar onBack={onBack} />
@@ -1300,14 +1314,20 @@ export function Editor({ onBack }: EditorProps) {
         autoFocus
       />
 
-      <DocumentView
-        blocks={blocks}
-        activeBlockId={activeBlockId}
-        onBlockMouseDown={handleBlockMouseDown}
-        onBlockClick={handleBlockClick}
-        onDoubleClick={handleDoubleClick}
-        onTripleClick={handleTripleClick}
-      />
+      <div className="editor-content">
+        <div className="editor-document">
+          <DocumentView
+            blocks={blocks}
+            activeBlockId={activeBlockId}
+            onBlockMouseDown={handleBlockMouseDown}
+            onBlockClick={handleBlockClick}
+            onDoubleClick={handleDoubleClick}
+            onTripleClick={handleTripleClick}
+          />
+        </div>
+
+        <CommentSidebar />
+      </div>
 
       <SelectionOverlay />
     </div>
