@@ -47,9 +47,12 @@ def _get_document_owner_id(db: Session, doc_id: str) -> Optional[str]:
 
 
 def _nest_replies(comments: list[CommentResponse]) -> list[CommentResponse]:
-    """Build nested tree: top-level comments with replies nested inside.
+    """Build a flat two-level tree: top-level comments with ALL descendants
+    (replies, replies-to-replies, etc.) flattened into their ``replies`` list
+    so the frontend only needs to render two levels.
 
-    Two-pass approach: first index by id, then place replies inside parents.
+    Two-pass approach: first index by id, then walk descendants up to the
+    top-level parent.
     """
     by_id: dict[str, CommentResponse] = {}
     top_level: list[CommentResponse] = []
@@ -60,7 +63,11 @@ def _nest_replies(comments: list[CommentResponse]) -> list[CommentResponse]:
 
     for c in comments:
         if c.parent_id and c.parent_id in by_id:
-            by_id[c.parent_id].replies.append(c)
+            # Walk up to find the top-level ancestor
+            ancestor = c
+            while ancestor.parent_id and ancestor.parent_id in by_id:
+                ancestor = by_id[ancestor.parent_id]
+            ancestor.replies.append(c)
         else:
             top_level.append(c)
 
@@ -184,16 +191,13 @@ def delete_comment(db: Session, comment_id: str, user: UserModel) -> dict:
 
 
 def toggle_resolved(db: Session, comment_id: str, user: UserModel) -> CommentResponse:
-    """Toggle the resolved status of a comment. Author or document owner can toggle."""
+    """Toggle the resolved status of a comment. Only the comment author can toggle."""
     comment = db.query(CommentModel).filter(CommentModel.id == comment_id).first()
     if not comment:
         raise ValueError("Comment not found")
 
-    # Check: comment author OR document owner
     if comment.author_id != user.id:
-        owner_id = _get_document_owner_id(db, comment.document_id)
-        if owner_id != user.id:
-            raise PermissionError("Only the comment author or document owner can resolve")
+        raise PermissionError("Only the comment author can resolve")
 
     comment.resolved = not comment.resolved
     db.commit()

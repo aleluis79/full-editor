@@ -10,13 +10,30 @@ from ..models.user import UserModel
 from ..models.sharing import DocumentShareModel
 
 
-def _doc_to_response(doc: DocumentModel) -> DocumentResponse:
+def _doc_to_response(doc: DocumentModel, db: Optional[Session] = None, user: Optional[UserModel] = None) -> DocumentResponse:
+    # Check write access — owner or write-share
+    can_write = False
+    if user and doc.owner_id == user.id:
+        can_write = True
+    elif user and db is not None:
+        share = (
+            db.query(DocumentShareModel)
+            .filter(
+                DocumentShareModel.document_id == doc.id,
+                DocumentShareModel.shared_with_user_id == user.id,
+                DocumentShareModel.permission == "write",
+            )
+            .first()
+        )
+        can_write = share is not None
+
     return DocumentResponse(
         id=doc.id,
         title=doc.title,
         content=json.loads(doc.content) if isinstance(doc.content, str) else doc.content,
         created_at=doc.created_at.isoformat(),
         updated_at=doc.updated_at.isoformat(),
+        can_write=can_write,
     )
 
 
@@ -59,7 +76,7 @@ def list_documents(db: Session, user: UserModel) -> list[DocumentResponse]:
         .order_by(DocumentModel.updated_at.desc())
         .all()
     )
-    return [_doc_to_response(d) for d in docs]
+    return [_doc_to_response(d, db, user) for d in docs]
 
 
 def list_shared_documents(db: Session, user: UserModel) -> list[dict]:
@@ -103,7 +120,7 @@ def get_document(db: Session, doc_id: str, user: Optional[UserModel] = None) -> 
     if user is not None and not _has_access(db, doc_id, user, require_write=False):
         return None
 
-    return _doc_to_response(doc)
+    return _doc_to_response(doc, db, user)
 
 
 def create_document(db: Session, data: DocumentCreate, user: UserModel) -> DocumentResponse:
@@ -116,7 +133,7 @@ def create_document(db: Session, data: DocumentCreate, user: UserModel) -> Docum
     db.add(doc)
     db.commit()
     db.refresh(doc)
-    return _doc_to_response(doc)
+    return _doc_to_response(doc, db, user)
 
 
 def update_document(db: Session, doc_id: str, data: DocumentUpdate, user: UserModel) -> Optional[DocumentResponse]:
@@ -136,7 +153,7 @@ def update_document(db: Session, doc_id: str, data: DocumentUpdate, user: UserMo
 
     db.commit()
     db.refresh(doc)
-    return _doc_to_response(doc)
+    return _doc_to_response(doc, db, user)
 
 
 def delete_document(db: Session, doc_id: str, user: UserModel) -> bool:

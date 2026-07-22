@@ -23,6 +23,9 @@ function handleKeycloakEvent(eventType: string, authError?: unknown) {
   if (eventType === 'onAuthSuccess' || eventType === 'onAuthRefreshSuccess') {
     if (keycloak.authenticated && keycloak.tokenParsed) {
       const tokenParsed = keycloak.tokenParsed as Record<string, unknown>;
+      const token = keycloak.token || '';
+
+      // Set initial auth from Keycloak token (uses sub as temporary id)
       store.setAuth(
         {
           id: (tokenParsed.sub as string) || '',
@@ -30,8 +33,31 @@ function handleKeycloakEvent(eventType: string, authError?: unknown) {
           email: (tokenParsed.email as string) || '',
           displayName: (tokenParsed.name as string) || (tokenParsed.preferred_username as string) || '',
         },
-        keycloak.token || '',
+        token,
       );
+
+      // Fetch the real internal DB user ID from /api/auth/me so that
+      // author comparisons (e.g. comment.author_id) work correctly.
+      fetch('http://localhost:8000/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((me) => {
+          if (me && me.id) {
+            store.setAuth(
+              {
+                id: me.id,
+                keycloakId: me.keycloak_id || (tokenParsed.sub as string) || '',
+                email: me.email || '',
+                displayName: me.display_name || '',
+              },
+              token,
+            );
+          }
+        })
+        .catch(() => {
+          // Keep the initial Keycloak-based auth as fallback
+        });
     }
   }
 

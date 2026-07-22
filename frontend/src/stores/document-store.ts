@@ -82,6 +82,7 @@ interface DocumentState {
   isDirty: boolean;
   isSaving: boolean;
   isEditorReady: boolean;
+  canWrite: boolean;
 
   // Actions
   setDocumentTitle: (title: string) => void;
@@ -129,8 +130,11 @@ interface DocumentState {
 }
 
 export const useDocumentStore = create<DocumentState>((_set, get) => {
-  // Wrap _set to auto-mark dirty when the document tree changes
+  // Wrap _set to auto-mark dirty when the document tree changes,
+  // and block mutations when in read-only mode.
   const set = (partial: Partial<DocumentState>) => {
+    // Block content mutations when read-only, but allow navigation away (closing the doc)
+    if (!get().canWrite && 'document' in partial && partial.currentDocId !== null) return;
     if ('document' in partial && 'isDirty' in partial === false) {
       _set({ ...partial, isDirty: true });
     } else {
@@ -151,6 +155,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
   isDirty: false,
   isSaving: false,
   isEditorReady: false,
+  canWrite: true,
 
   setDocumentTitle: (title) => {
     set({ documentTitle: title, isDirty: true });
@@ -182,6 +187,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
         isDirty: false,
         isSaving: false,
         isEditorReady: true,
+        canWrite: true,
       });
       return doc.id;
     } catch (err) {
@@ -219,6 +225,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
         isDirty: false,
         isSaving: false,
         isEditorReady: true,
+        canWrite: doc.can_write !== false,
       });
     } catch (err) {
       console.error('Failed to load document:', err);
@@ -260,6 +267,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       isDirty: false,
       isSaving: false,
       isEditorReady: false,
+      canWrite: true,
     });
   },
 

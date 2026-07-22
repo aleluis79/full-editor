@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CommentData, CommentUpdateData } from '../api/client';
 import { useCommentStore } from '../stores/comment-store';
+import { useAuthStore } from '../stores/auth-store';
 
 interface CommentThreadProps {
   comments: CommentData[];
@@ -36,9 +37,10 @@ interface CommentItemProps {
   comment: CommentData;
   docId: string;
   isTopLevel: boolean;
+  threadResolved?: boolean;
 }
 
-function CommentItem({ comment, docId, isTopLevel }: CommentItemProps) {
+function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItemProps) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -69,17 +71,7 @@ function CommentItem({ comment, docId, isTopLevel }: CommentItemProps) {
     setShowReplyForm(false);
   };
 
-  // Get current user from auth store
-  const currentUserId = (() => {
-    try {
-      const authStore = (window as any).__ZUSTAND_AUTH_STORE__;
-      return authStore?.getState()?.user?.id ?? '';
-    } catch {
-      return '';
-    }
-  })();
-
-  // For now, show actions for all users (author check will be done by API)
+  const currentUserId = useAuthStore((s) => s.user?.id ?? '');
   const isAuthor = comment.author_id === currentUserId;
 
   return (
@@ -118,22 +110,36 @@ function CommentItem({ comment, docId, isTopLevel }: CommentItemProps) {
         <div className="comment-item-actions">
           {!editing && (
             <>
-              <button className="comment-action-btn" onClick={() => setShowReplyForm(!showReplyForm)}>
-                Reply
-              </button>
-              {isAuthor && (
-                <button className="comment-action-btn" onClick={() => { setEditContent(comment.content); setEditing(true); }}>
-                  Edit
-                </button>
+              {(comment.resolved || threadResolved) ? (
+                /* Resolved thread: only show Unresolve on the top-level comment */
+                isAuthor && isTopLevel && (
+                  <button className="comment-action-btn" onClick={handleResolve}>
+                    Unresolve
+                  </button>
+                )
+              ) : (
+                /* Not resolved: show all actions */
+                <>
+                  <button className="comment-action-btn" onClick={() => setShowReplyForm(!showReplyForm)}>
+                    Reply
+                  </button>
+                  {isAuthor && (
+                    <button className="comment-action-btn" onClick={() => { setEditContent(comment.content); setEditing(true); }}>
+                      Edit
+                    </button>
+                  )}
+                  {isAuthor && (
+                    <button className="comment-action-btn comment-action-btn--danger" onClick={handleDelete}>
+                      Delete
+                    </button>
+                  )}
+                  {isAuthor && isTopLevel && (
+                    <button className="comment-action-btn" onClick={handleResolve}>
+                      Resolve
+                    </button>
+                  )}
+                </>
               )}
-              {isAuthor && (
-                <button className="comment-action-btn comment-action-btn--danger" onClick={handleDelete}>
-                  Delete
-                </button>
-              )}
-              <button className="comment-action-btn" onClick={handleResolve}>
-                {comment.resolved ? 'Unresolve' : 'Resolve'}
-              </button>
             </>
           )}
         </div>
@@ -177,11 +183,11 @@ export function CommentThread({ comments, docId, activeBlockId }: CommentThreadP
         >
           <CommentItem comment={comment} docId={docId} isTopLevel />
 
-          {/* Nested replies */}
+          {/* Nested replies — pass threadResolved so replies hide actions when resolved */}
           {comment.replies && comment.replies.length > 0 && (
             <div className="comment-replies">
               {comment.replies.map((reply) => (
-                <CommentItem key={reply.id} comment={reply} docId={docId} isTopLevel={false} />
+                <CommentItem key={reply.id} comment={reply} docId={docId} isTopLevel={false} threadResolved={comment.resolved} />
               ))}
             </div>
           )}

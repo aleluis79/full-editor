@@ -645,10 +645,20 @@ export function Toolbar({ onBack }: ToolbarProps) {
           {currentDocIdFromStore && (
             <button
               className={`toolbar-btn${commentVisible ? ' toolbar-btn-active' : ''}`}
-              onClick={() => {
+              onClick={async () => {
+                // Save the document before showing comments so that any
+                // new comment references persisted block IDs/text.
+                if (!commentVisible) {
+                  try {
+                    await useDocumentStore.getState().saveDocument();
+                  } catch (err) {
+                    console.error('Save failed before opening comments:', err);
+                  }
+                }
                 toggleCommentVisibility();
-                if (!commentVisible && currentDocIdFromStore) {
-                  fetchComments(currentDocIdFromStore);
+                if (!commentVisible) {
+                  const docId = useDocumentStore.getState().currentDocId;
+                  if (docId) fetchComments(docId);
                 }
               }}
               title="Toggle comments"

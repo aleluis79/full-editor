@@ -103,6 +103,18 @@ body {
   pointer-events: none;
 }
 
+.editor-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fef3cd;
+  border-bottom: 1px solid #ffc107;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #856404;
+}
+
 /* ============================================================
    Toolbar
    ============================================================ */
@@ -1945,12 +1957,89 @@ body {
   padding: var(--space-3);
 }
 
+/* New comment form at top of sidebar */
+.comment-new-form {
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.comment-new-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.comment-new-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.comment-new-submit {
+  margin-top: var(--space-1);
+  padding: 4px 12px;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.comment-new-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.comment-new-submit:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+.comment-new-hint {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* ============================================================
    Comment Block Group
    ============================================================ */
 
 .comment-block-group {
   margin-bottom: var(--space-4);
+}
+
+.comment-filter-back {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-1) 0 var(--space-2);
+  margin-bottom: var(--space-2);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.comment-filter-back:hover {
+  opacity: 0.8;
 }
 
 .comment-block-id {
@@ -2251,12 +2340,6 @@ body {
   font-size: 14px;
   color: var(--color-text-secondary);
   margin-bottom: var(--space-2);
-}
-
-.comment-empty-hint {
-  font-size: 12px !important;
-  color: var(--color-text-secondary);
-  opacity: 0.7;
 }
 
 .comment-loading {

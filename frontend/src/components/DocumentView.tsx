@@ -270,7 +270,6 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
           })}
         </div>
       )}
-      </div>
 
       {/* Footer with page number */}
       {page.footerArea && (

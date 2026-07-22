@@ -223,15 +223,15 @@ class TestCommentStorage:
         unresolved = toggle_resolved(db_session, comment.id, author)
         assert unresolved.resolved is False
 
-    def test_toggle_resolved_owner_can_resolve(self, db_session, shared_document, owner, author):
+    def test_toggle_resolved_owner_cannot_resolve(self, db_session, shared_document, owner, author):
         from app.core.comment_storage import create_comment, toggle_resolved
 
         comment = create_comment(
             db_session, shared_document.id,
             CommentCreate(block_id="block-1", content="Fix this"), author
         )
-        resolved = toggle_resolved(db_session, comment.id, owner)
-        assert resolved.resolved is True
+        with pytest.raises(PermissionError):
+            toggle_resolved(db_session, comment.id, owner)
 
     def test_toggle_resolved_not_author_not_owner(self, db_session, shared_document, author, other_user):
         from app.core.comment_storage import create_comment, toggle_resolved

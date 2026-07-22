@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCommentStore } from '../stores/comment-store';
 import { CommentThread } from './CommentThread';
 
@@ -24,8 +24,10 @@ export function CommentSidebar() {
   const activeBlockId = useCommentStore((s) => s.activeBlockId);
   const currentDocId = useCommentStore((s) => s.currentDocId);
   const fetchComments = useCommentStore((s) => s.fetchComments);
+  const createComment = useCommentStore((s) => s.createComment);
   const toggleVisibility = useCommentStore((s) => s.toggleVisibility);
   const setActiveBlock = useCommentStore((s) => s.setActiveBlock);
+  const [newCommentText, setNewCommentText] = useState('');
 
   // Fetch comments on mount for the current document
   useEffect(() => {
@@ -58,6 +60,41 @@ export function CommentSidebar() {
       </div>
 
       <div className="comment-sidebar-content">
+        {/* New comment form — always visible so users can start a thread */}
+        {currentDocId && (
+          <div className="comment-new-form">
+            {activeBlockId ? (
+              <>
+                <textarea
+                  className="comment-new-textarea"
+                  placeholder="Write a comment…"
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  rows={3}
+                />
+                <button
+                  className="comment-new-submit"
+                  disabled={!newCommentText.trim()}
+                  onClick={async () => {
+                    try {
+                      await createComment(currentDocId, activeBlockId, newCommentText.trim());
+                      setNewCommentText('');
+                    } catch {
+                      // error handled by store
+                    }
+                  }}
+                >
+                  Comment
+                </button>
+              </>
+            ) : (
+              <p className="comment-new-hint">
+                Click on a paragraph in the document to select it, then write a comment.
+              </p>
+            )}
+          </div>
+        )}
+
         {loading && comments.length === 0 && (
           <div className="comment-loading">Loading comments...</div>
         )}
@@ -69,11 +106,22 @@ export function CommentSidebar() {
         {!loading && !error && comments.length === 0 && (
           <div className="comment-empty">
             <p>No comments yet.</p>
-            <p className="comment-empty-hint">Click on a comment indicator in the document gutter to add one.</p>
           </div>
         )}
 
-        {Object.entries(grouped).map(([blockId, blockComments]) => (
+        {/* When filtering by a specific block, show a back link */}
+        {activeBlockId && (
+          <button
+            className="comment-filter-back"
+            onClick={() => setActiveBlock(null)}
+          >
+            ← All comments
+          </button>
+        )}
+
+        {Object.entries(grouped)
+          .filter(([blockId]) => !activeBlockId || blockId === activeBlockId)
+          .map(([blockId, blockComments]) => (
           <div
             key={blockId}
             data-thread-block-id={blockId}

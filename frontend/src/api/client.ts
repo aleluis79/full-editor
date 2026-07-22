@@ -29,6 +29,7 @@ export interface DocumentData {
   content: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  can_write?: boolean;
 }
 
 export interface CreateDocumentData {

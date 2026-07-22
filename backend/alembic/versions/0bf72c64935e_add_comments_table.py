@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column('author_id', sa.String(length=36), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
         sa.Column('parent_id', sa.String(length=36), nullable=True),
-        sa.Column('resolved', sa.Boolean(), nullable=False, server_default=sa.text('0')),
+        sa.Column('resolved', sa.Boolean(), nullable=False, server_default=sa.text('FALSE')),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(['author_id'], ['users.id'], ondelete='CASCADE'),

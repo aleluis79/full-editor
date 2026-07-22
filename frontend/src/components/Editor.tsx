@@ -285,6 +285,7 @@ export function Editor({ onBack }: EditorProps) {
   // Handle keyboard input
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (!useDocumentStore.getState().canWrite) return;
       const { nodeId, offset } = cursor.position;
       if (!nodeId) return;
 
@@ -1205,6 +1206,17 @@ export function Editor({ onBack }: EditorProps) {
     }
   }, [currentDocId, fetchComments]);
 
+  // Sync active block from editor cursor to comment store when comments visible.
+  // Fires both on visible→true (via commentVisible) AND on cursor moves (via activeBlockId).
+  const _commentVisible = useCommentStore((s) => s.visible);
+  const commentSetActiveBlock = useCommentStore((s) => s.setActiveBlock);
+  const canWrite = useDocumentStore((s) => s.canWrite);
+  useEffect(() => {
+    if (_commentVisible && activeBlockId) {
+      commentSetActiveBlock(activeBlockId);
+    }
+  }, [activeBlockId, _commentVisible, commentSetActiveBlock]);
+
   // Sync browser native selection to editor state — without this, text
   // selected by mouse drag is invisible to the toolbar and keyboard
   // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
@@ -1247,21 +1259,31 @@ export function Editor({ onBack }: EditorProps) {
     return () => document.removeEventListener('selectionchange', handler);
   }, [setCursorPosition, setSelection, clearSelection]);
 
-  const commentVisible = useCommentStore((s) => s.visible);
-
   return (
     <div
       className="editor"
       ref={containerRef}
-      style={{ width: commentVisible ? pageWidth : pageWidth }}
+      style={{ width: pageWidth }}
       onMouseDown={() => useEditorStore.getState().selectTable(null)}
     >
       <Toolbar onBack={onBack} />
+
+      {/* Read-only banner */}
+      {!canWrite && (
+        <div className="editor-readonly-banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          Read-only — you don't have permission to edit this document.
+        </div>
+      )}
 
       {/* Hidden textarea for keyboard input */}
       <textarea
         ref={textareaRef}
         className="hidden-textarea"
+        readOnly={!canWrite}
         onKeyDown={handleKeyDown}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
