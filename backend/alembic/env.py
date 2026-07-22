@@ -31,6 +31,7 @@ from app.core.database import Base  # noqa: E402
 from app.models.document import DocumentModel  # noqa: E402
 from app.models.user import UserModel  # noqa: E402
 from app.models.sharing import DocumentShareModel  # noqa: E402
+from app.models.comment import CommentModel  # noqa: E402
 
 target_metadata = Base.metadata
 
