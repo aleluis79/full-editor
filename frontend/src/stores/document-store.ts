@@ -1537,10 +1537,10 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
     // Validate client-side
     const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
-      throw new Error('Only PNG, JPEG, GIF, and WebP images are supported');
+      throw new Error('ERROR_UNSUPPORTED_FORMAT');
     }
     if (file.size > 10 * 1024 * 1024) {
-      throw new Error('Image must be under 10MB');
+      throw new Error('ERROR_IMAGE_TOO_LARGE');
     }
 
     const url = await uploadImage(file);
@@ -1561,7 +1561,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       }
       return imageId || '';
     }
-    throw new Error('No cursor position');
+    throw new Error('ERROR_NO_CURSOR_POSITION');
   },
 
   resizeImage: (blockId, width, height) => {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   fetchDocuments,
   deleteDocument,
@@ -15,6 +16,7 @@ interface DocumentManagerProps {
 }
 
 export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentManagerProps) {
+  const { t } = useTranslation('document');
   const [documents, setDocuments] = useState<DocumentData[]>([]);
   const [sharedDocs, setSharedDocs] = useState<SharedWithMeDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +32,8 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
       ]);
       setDocuments(docs);
       setSharedDocs(shared);
-    } catch (err) {
-      setError('No se pudieron cargar los documentos');
+    } catch {
+      setError('ERROR_LOAD_DOCUMENTS');
     } finally {
       setLoading(false);
     }
@@ -43,10 +45,10 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
 
   const handleCreate = async () => {
     try {
-      const doc = await createDocument({ title: 'Untitled Document', content: {} });
+      const doc = await createDocument({ title: t('untitled'), content: {} });
       onCreateDocument(doc.id);
     } catch {
-      setError('No se pudo crear el documento');
+      setError('ERROR_CREATE_DOCUMENT');
     }
   };
 
@@ -56,7 +58,7 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
       await deleteDocument(id);
       setDocuments((prev) => prev.filter((d) => d.id !== id));
     } catch {
-      setError('No se pudo eliminar el documento');
+      setError('ERROR_DELETE_DOCUMENT');
     }
   };
 
@@ -74,7 +76,7 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
   if (loading) {
     return (
       <div className="doc-manager">
-        <div className="doc-manager-loading">Cargando documentos...</div>
+        <div className="doc-manager-loading">{t('loadingDocuments')}</div>
       </div>
     );
   }
@@ -82,21 +84,21 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
   return (
     <div className="doc-manager">
       <div className="doc-manager-header">
-        <h1>Full Editor</h1>
+        <h1>{t('appTitle')}</h1>
         <button className="doc-manager-new-btn" onClick={handleCreate}>
-          + Nuevo documento
+          {t('newDocument')}
         </button>
       </div>
 
-      {error && <div className="doc-manager-error">{error}</div>}
+      {error && <div className="doc-manager-error">{t(`errors:${error}`, { defaultValue: error })}</div>}
 
       {/* My documents */}
       <section className="doc-manager-section">
-        <h2 className="doc-manager-section-title">My documents</h2>
+        <h2 className="doc-manager-section-title">{t('myDocuments')}</h2>
         {documents.length === 0 ? (
           <div className="doc-manager-empty">
-            <p>No tenés documentos todavía.</p>
-            <p>Creá uno nuevo para empezar a escribir.</p>
+            <p>{t('noDocumentsYet')}</p>
+            <p>{t('createOneToStart')}</p>
           </div>
         ) : (
           <div className="doc-manager-list">
@@ -109,13 +111,13 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
                 <div className="doc-manager-item-info">
                   <span className="doc-manager-item-title">{doc.title}</span>
                   <span className="doc-manager-item-date">
-                    Última modificación: {formatDate(doc.updated_at)}
+                    {t('lastModified')} {formatDate(doc.updated_at)}
                   </span>
                 </div>
                 <button
                   className="doc-manager-item-delete"
                   onClick={(e) => handleDelete(doc.id, e)}
-                  title="Eliminar documento"
+                  title={t('deleteDocument')}
                 >
                   <Delete size={16} />
                 </button>
@@ -128,7 +130,7 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
       {/* Shared with me */}
       {sharedDocs.length > 0 && (
         <section className="doc-manager-section">
-          <h2 className="doc-manager-section-title">Shared with me</h2>
+          <h2 className="doc-manager-section-title">{t('sharedWithMe')}</h2>
           <div className="doc-manager-list">
             {sharedDocs.map((sd) => (
               <div
@@ -139,11 +141,11 @@ export function DocumentManager({ onOpenDocument, onCreateDocument }: DocumentMa
                 <div className="doc-manager-item-info">
                   <span className="doc-manager-item-title">{sd.title}</span>
                   <span className="doc-manager-item-date">
-                    Shared by {sd.shared_by_display_name} · {sd.permission === 'write' ? 'Can edit' : 'Can read'}
+                    {t('sharedBy')} {sd.shared_by_display_name} · {sd.permission === 'write' ? t('canEdit') : t('canRead')}
                   </span>
                 </div>
                 <div className="doc-manager-item-shared-badge">
-                  {sd.permission === 'write' ? 'Edit' : 'View'}
+                  {sd.permission === 'write' ? t('edit') : t('view')}
                 </div>
               </div>
             ))}

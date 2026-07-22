@@ -48,7 +48,7 @@ export interface UpdateDocumentData {
 export async function fetchDocuments(): Promise<DocumentData[]> {
   const response = await authFetch(`${API_BASE}/documents/`);
   if (!response.ok) {
-    throw new Error('Failed to fetch documents');
+    throw new Error('ERROR_FETCH_DOCUMENTS');
   }
   return response.json();
 }
@@ -59,7 +59,7 @@ export async function fetchDocuments(): Promise<DocumentData[]> {
 export async function fetchDocument(id: string): Promise<DocumentData> {
   const response = await authFetch(`${API_BASE}/documents/${id}`);
   if (!response.ok) {
-    throw new Error('Failed to fetch document');
+    throw new Error('ERROR_FETCH_DOCUMENT');
   }
   return response.json();
 }
@@ -76,7 +76,7 @@ export async function createDocument(data: CreateDocumentData = {}): Promise<Doc
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    throw new Error('Failed to create document');
+    throw new Error('ERROR_CREATE_DOCUMENT');
   }
   return response.json();
 }
@@ -96,7 +96,7 @@ export async function updateDocument(
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    throw new Error('Failed to update document');
+    throw new Error('ERROR_UPDATE_DOCUMENT');
   }
   return response.json();
 }
@@ -109,7 +109,7 @@ export async function deleteDocument(id: string): Promise<void> {
     method: 'DELETE',
   });
   if (!response.ok) {
-    throw new Error('Failed to delete document');
+    throw new Error('ERROR_DELETE_DOCUMENT');
   }
 }
 
@@ -128,8 +128,8 @@ export async function uploadImage(file: File): Promise<string> {
     body: formData,
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Upload failed' }));
-    throw new Error(err.detail || 'Upload failed');
+    const err = await response.json().catch(() => ({ detail: 'ERROR_UPLOAD_FAILED' }));
+    throw new Error(err.detail || 'ERROR_UPLOAD_FAILED');
   }
   const data = await response.json();
   return data.url;
@@ -169,7 +169,7 @@ export interface UserSearchResult {
  */
 export async function listShares(documentId: string): Promise<ShareData[]> {
   const response = await authFetch(`${API_BASE}/shares/?document_id=${documentId}`);
-  if (!response.ok) throw new Error('Failed to list shares');
+  if (!response.ok) throw new Error('ERROR_LIST_SHARES');
   return response.json();
 }
 
@@ -191,8 +191,8 @@ export async function createShare(
     }),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Failed to share' }));
-    throw new Error(err.detail || 'Failed to share');
+    const err = await response.json().catch(() => ({ detail: 'ERROR_CREATE_SHARE' }));
+    throw new Error(err.detail || 'ERROR_CREATE_SHARE');
   }
   return response.json();
 }
@@ -204,7 +204,7 @@ export async function revokeShare(shareId: string): Promise<void> {
   const response = await authFetch(`${API_BASE}/shares/${shareId}`, {
     method: 'DELETE',
   });
-  if (!response.ok) throw new Error('Failed to revoke share');
+  if (!response.ok) throw new Error('ERROR_REVOKE_SHARE');
 }
 
 /**
@@ -212,7 +212,7 @@ export async function revokeShare(shareId: string): Promise<void> {
  */
 export async function searchUsers(query: string): Promise<UserSearchResult[]> {
   const response = await authFetch(`${API_BASE}/users/search?q=${encodeURIComponent(query)}`);
-  if (!response.ok) throw new Error('Failed to search users');
+  if (!response.ok) throw new Error('ERROR_SEARCH_USERS');
   return response.json();
 }
 
@@ -221,7 +221,7 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
  */
 export async function fetchSharedWithMe(): Promise<SharedWithMeDocument[]> {
   const response = await authFetch(`${API_BASE}/documents/shared-with-me`);
-  if (!response.ok) throw new Error('Failed to fetch shared documents');
+  if (!response.ok) throw new Error('ERROR_FETCH_SHARED_DOCUMENTS');
   return response.json();
 }
 
@@ -248,7 +248,7 @@ export async function exportPDF(
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    throw new Error('Failed to export PDF');
+    throw new Error('ERROR_EXPORT_PDF');
   }
 
   const blob = await response.blob();
@@ -296,7 +296,7 @@ export interface CommentUpdateData {
 export async function fetchComments(docId: string): Promise<CommentData[]> {
   const response = await authFetch(`${API_BASE}/documents/${docId}/comments`);
   if (!response.ok) {
-    throw new Error('Failed to fetch comments');
+    throw new Error('ERROR_FETCH_COMMENTS');
   }
   return response.json();
 }
@@ -314,8 +314,8 @@ export async function createComment(
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Failed to create comment' }));
-    throw new Error(err.detail || 'Failed to create comment');
+    const err = await response.json().catch(() => ({ detail: 'ERROR_CREATE_COMMENT' }));
+    throw new Error(err.detail || 'ERROR_CREATE_COMMENT');
   }
   return response.json();
 }
@@ -337,8 +337,8 @@ export async function createReply(
     },
   );
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Failed to create reply' }));
-    throw new Error(err.detail || 'Failed to create reply');
+    const err = await response.json().catch(() => ({ detail: 'ERROR_CREATE_REPLY' }));
+    throw new Error(err.detail || 'ERROR_CREATE_REPLY');
   }
   return response.json();
 }
@@ -360,8 +360,8 @@ export async function updateComment(
     },
   );
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Failed to update comment' }));
-    throw new Error(err.detail || 'Failed to update comment');
+    const err = await response.json().catch(() => ({ detail: 'ERROR_UPDATE_COMMENT' }));
+    throw new Error(err.detail || 'ERROR_UPDATE_COMMENT');
   }
   return response.json();
 }
@@ -378,7 +378,7 @@ export async function deleteComment(
     { method: 'DELETE' },
   );
   if (!response.ok) {
-    throw new Error('Failed to delete comment');
+    throw new Error('ERROR_DELETE_COMMENT');
   }
 }
 
@@ -394,7 +394,7 @@ export async function resolveComment(
     { method: 'PATCH' },
   );
   if (!response.ok) {
-    throw new Error('Failed to resolve comment');
+    throw new Error('ERROR_RESOLVE_COMMENT');
   }
   return response.json();
 }

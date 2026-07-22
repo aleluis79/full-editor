@@ -1502,6 +1502,31 @@ body {
   background: #fef2f2;
 }
 
+.user-menu-lang {
+  display: flex;
+  gap: 2px;
+  margin: 0 8px;
+}
+
+.user-menu-lang button {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.user-menu-lang button.active {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
 /* ============================================================
    Share Dialog
    ============================================================ */

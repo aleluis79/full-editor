@@ -1,0 +1,21 @@
+{
+  "appTitle": "Full Editor",
+  "untitled": "Untitled Document",
+  "myDocuments": "My documents",
+  "sharedWithMe": "Shared with me",
+  "newDocument": "+ New document",
+  "loadingDocuments": "Loading documents...",
+  "noDocumentsYet": "You don't have any documents yet.",
+  "createOneToStart": "Create a new one to start writing.",
+  "lastModified": "Last modified:",
+  "deleteDocument": "Delete document",
+  "sharedBy": "Shared by",
+  "canEdit": "Can edit",
+  "canRead": "Can read",
+  "edit": "Edit",
+  "view": "View",
+  "readOnly": "Read-only — you don't have permission to edit this document.",
+  "errorLoading": "Could not load documents",
+  "errorCreating": "Could not create document",
+  "errorDeleting": "Could not delete document"
+}

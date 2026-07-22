@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ReactKeycloakProvider } from '@react-keycloak/web';
 import Keycloak from 'keycloak-js';
 import './index.css';
+import './i18n';
 import App from './App.tsx';
 import { useAuthStore } from './stores/auth-store.ts';
 

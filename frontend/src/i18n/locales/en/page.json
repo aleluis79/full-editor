@@ -1,0 +1,11 @@
+{
+  "paperSize": "Paper Size",
+  "orientation": "Orientation",
+  "portrait": "Portrait",
+  "landscape": "Landscape",
+  "margins": "Margins (points)",
+  "top": "Top",
+  "right": "Right",
+  "bottom": "Bottom",
+  "left": "Left"
+}

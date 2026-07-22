@@ -8,6 +8,7 @@
  * - Revoke shares
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   listShares,
   createShare,
@@ -24,6 +25,7 @@ interface ShareDialogProps {
 }
 
 export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
+  const { t } = useTranslation('share');
   const [shares, setShares] = useState<ShareData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -38,7 +40,7 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
       const data = await listShares(documentId);
       setShares(data);
     } catch {
-      setError('Failed to load shares');
+      setError('ERROR_LIST_SHARES');
     } finally {
       setLoading(false);
     }
@@ -80,7 +82,7 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
       setSearchResults([]);
       searchRef.current?.focus();
     } catch (err: any) {
-      setError(err.message || 'Failed to share');
+      setError(err.message || 'ERROR_CREATE_SHARE');
     }
   };
 
@@ -89,7 +91,7 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
       await revokeShare(shareId);
       await loadShares();
     } catch {
-      setError('Failed to revoke share');
+      setError('ERROR_REVOKE_SHARE');
     }
   };
 
@@ -99,11 +101,11 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
     <div className="share-overlay" onClick={onClose}>
       <div className="share-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="share-dialog-header">
-          <h2>Share document</h2>
+          <h2>{t('shareDocument')}</h2>
           <button className="share-close-btn" onClick={onClose}>×</button>
         </div>
 
-        {error && <div className="share-error">{error}</div>}
+        {error && <div className="share-error">{t(`errors:${error}`, { defaultValue: error })}</div>}
 
         {/* Search & add user */}
         <div className="share-add-section">
@@ -112,7 +114,7 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
               ref={searchRef}
               type="text"
               className="share-search-input"
-              placeholder="Search users by name or email..."
+              placeholder={t('searchUsersPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -121,8 +123,8 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
               value={selectedPermission}
               onChange={(e) => setSelectedPermission(e.target.value as 'read' | 'write')}
             >
-              <option value="read">Can read</option>
-              <option value="write">Can edit</option>
+              <option value="read">{t('canRead')}</option>
+              <option value="write">{t('canEdit')}</option>
             </select>
           </div>
 
@@ -141,24 +143,24 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
                     <span className="share-search-name">{u.display_name}</span>
                     <span className="share-search-email">{u.email}</span>
                   </div>
-                  <button className="share-add-btn">Add</button>
+                  <button className="share-add-btn">{t('add')}</button>
                 </div>
               ))}
             </div>
           )}
 
           {searchQuery.length >= 2 && searchResults.length === 0 && (
-            <div className="share-no-results">No users found</div>
+            <div className="share-no-results">{t('noUsersFound')}</div>
           )}
         </div>
 
         {/* Existing shares */}
         <div className="share-list-section">
-          <h3>People with access</h3>
+          <h3>{t('peopleWithAccess')}</h3>
           {loading ? (
-            <div className="share-loading">Loading...</div>
+            <div className="share-loading">{t('loading')}</div>
           ) : shares.length === 0 ? (
-            <div className="share-empty">No shares yet. Search for a user above.</div>
+            <div className="share-empty">{t('noSharesYet')}</div>
           ) : (
             <div className="share-list">
               {shares.map((s) => (
@@ -168,17 +170,17 @@ export function ShareDialog({ documentId, isOpen, onClose }: ShareDialogProps) {
                   </div>
                   <div className="share-item-info">
                     <span className="share-item-name">
-                      {s.shared_with_display_name || 'Unknown'}
+                      {s.shared_with_display_name || t('unknown')}
                     </span>
                     <span className="share-item-email">{s.shared_with_email}</span>
                   </div>
                   <span className={`share-item-permission ${s.permission}`}>
-                    {s.permission === 'read' ? 'Can read' : 'Can edit'}
+                    {s.permission === 'read' ? t('canRead') : t('canEdit')}
                   </span>
                   <button
                     className="share-revoke-btn"
                     onClick={() => handleRevoke(s.id)}
-                    title="Remove access"
+                    title={t('removeAccess')}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18" />

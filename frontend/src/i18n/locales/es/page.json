@@ -1,0 +1,11 @@
+{
+  "paperSize": "Tamaño de papel",
+  "orientation": "Orientación",
+  "portrait": "Vertical",
+  "landscape": "Horizontal",
+  "margins": "Márgenes (puntos)",
+  "top": "Superior",
+  "right": "Derecho",
+  "bottom": "Inferior",
+  "left": "Izquierdo"
+}

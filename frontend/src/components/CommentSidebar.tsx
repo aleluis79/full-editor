@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCommentStore } from '../stores/comment-store';
 import { CommentThread } from './CommentThread';
 
@@ -17,6 +18,7 @@ function groupByBlock(comments: import('../api/client').CommentData[]) {
 }
 
 export function CommentSidebar() {
+  const { t } = useTranslation('comments');
   const comments = useCommentStore((s) => s.comments);
   const visible = useCommentStore((s) => s.visible);
   const loading = useCommentStore((s) => s.loading);
@@ -53,8 +55,8 @@ export function CommentSidebar() {
   return (
     <div className="comment-sidebar">
       <div className="comment-sidebar-header">
-        <h3 className="comment-sidebar-title">Comments</h3>
-        <button className="comment-sidebar-close" onClick={toggleVisibility} title="Close comments">
+        <h3 className="comment-sidebar-title">{t('title')}</h3>
+        <button className="comment-sidebar-close" onClick={toggleVisibility} title={t('close')}>
           ×
         </button>
       </div>
@@ -67,7 +69,7 @@ export function CommentSidebar() {
               <>
                 <textarea
                   className="comment-new-textarea"
-                  placeholder="Write a comment…"
+                  placeholder={t('writeComment')}
                   value={newCommentText}
                   onChange={(e) => setNewCommentText(e.target.value)}
                   rows={3}
@@ -84,28 +86,28 @@ export function CommentSidebar() {
                     }
                   }}
                 >
-                  Comment
+                  {t('comment')}
                 </button>
               </>
             ) : (
               <p className="comment-new-hint">
-                Click on a paragraph in the document to select it, then write a comment.
+                {t('selectBlockHint')}
               </p>
             )}
           </div>
         )}
 
         {loading && comments.length === 0 && (
-          <div className="comment-loading">Loading comments...</div>
+          <div className="comment-loading">{t('loading')}</div>
         )}
 
         {error && (
-          <div className="comment-error">{error}</div>
+          <div className="comment-error">{t(`errors:${error}`, { defaultValue: error })}</div>
         )}
 
         {!loading && !error && comments.length === 0 && (
           <div className="comment-empty">
-            <p>No comments yet.</p>
+            <p>{t('noComments')}</p>
           </div>
         )}
 
@@ -115,7 +117,7 @@ export function CommentSidebar() {
             className="comment-filter-back"
             onClick={() => setActiveBlock(null)}
           >
-            ← All comments
+            {t('allComments')}
           </button>
         )}
 
@@ -127,7 +129,7 @@ export function CommentSidebar() {
             data-thread-block-id={blockId}
             className="comment-block-group"
           >
-            <div className="comment-block-id">Block: {blockId.slice(0, 8)}...</div>
+            <div className="comment-block-id">{t('blockLabel')} {blockId.slice(0, 8)}...</div>
             <CommentThread
               comments={blockComments}
               docId={currentDocId || ''}

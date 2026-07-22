@@ -1,0 +1,16 @@
+{
+  "shareDocument": "Compartir documento",
+  "searchUsersPlaceholder": "Buscar usuarios por nombre o correo...",
+  "canRead": "Puede leer",
+  "canEdit": "Puede editar",
+  "add": "Agregar",
+  "noUsersFound": "No se encontraron usuarios",
+  "peopleWithAccess": "Personas con acceso",
+  "loading": "Cargando...",
+  "noSharesYet": "Aún no hay usuarios. Busca un usuario arriba.",
+  "unknown": "Desconocido",
+  "removeAccess": "Quitar acceso",
+  "errorLoadShares": "Error al cargar los usuarios",
+  "errorCreateShare": "Error al compartir",
+  "errorRevokeShare": "Error al revocar el acceso"
+}

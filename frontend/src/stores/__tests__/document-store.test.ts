@@ -68,7 +68,7 @@ describe('document-store uploadAndInsertImage', () => {
     const store = useDocumentStore.getState();
 
     await expect(store.uploadAndInsertImage(file)).rejects.toThrow(
-      'Only PNG, JPEG, GIF, and WebP images are supported',
+      'ERROR_UNSUPPORTED_FORMAT',
     );
     expect(uploadImage).not.toHaveBeenCalled();
   });
@@ -80,7 +80,7 @@ describe('document-store uploadAndInsertImage', () => {
     const store = useDocumentStore.getState();
 
     await expect(store.uploadAndInsertImage(file)).rejects.toThrow(
-      'Image must be under 10MB',
+      'ERROR_IMAGE_TOO_LARGE',
     );
     expect(uploadImage).not.toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe('document-store uploadAndInsertImage', () => {
     const file = new File(['dummy'], 'test.png', { type: 'image/png' });
     const store = useDocumentStore.getState();
 
-    await expect(store.uploadAndInsertImage(file)).rejects.toThrow('No cursor position');
+    await expect(store.uploadAndInsertImage(file)).rejects.toThrow('ERROR_NO_CURSOR_POSITION');
   });
 });
 

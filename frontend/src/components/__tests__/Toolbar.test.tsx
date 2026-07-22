@@ -5,6 +5,60 @@ import { Toolbar } from '../Toolbar';
 import { useDocumentStore } from '../../stores/document-store';
 import { useEditorStore } from '../../stores/editor-store';
 
+// Mock react-i18next so useTranslation returns English labels from the translation keys
+vi.mock('react-i18next', () => ({
+  useTranslation: (ns: string) => ({
+    t: (key: string) => {
+      // Return English label for toolbar keys
+      const labels: Record<string, string> = {
+        'toolbar:backToDocuments': 'Back to documents',
+        'toolbar:editTitle': 'Edit title',
+        'toolbar:saving': 'Saving...',
+        'toolbar:save': 'Save',
+        'toolbar:exportPdf': 'Export to PDF',
+        'toolbar:shareDocument': 'Share document',
+        'toolbar:toggleComments': 'Toggle comments',
+        'toolbar:pageSettings': 'Page settings',
+        'toolbar:boldTooltip': 'Bold (Ctrl+B)',
+        'toolbar:italicTooltip': 'Italic (Ctrl+I)',
+        'toolbar:underlineTooltip': 'Underline (Ctrl+U)',
+        'toolbar:strikethroughTooltip': 'Strikethrough',
+        'toolbar:superscriptTooltip': 'Superscript',
+        'toolbar:subscriptTooltip': 'Subscript',
+        'toolbar:linkTooltip': 'Link (Ctrl+K)',
+        'toolbar:linkPlaceholder': 'https://...',
+        'toolbar:linkOk': 'OK',
+        'toolbar:linkCancel': 'Cancel',
+        'toolbar:alignLeftTooltip': 'Align left',
+        'toolbar:alignCenterTooltip': 'Center',
+        'toolbar:alignRightTooltip': 'Align right',
+        'toolbar:lineSpacingTooltip': 'Line spacing',
+        'toolbar:clearFormattingTooltip': 'Clear formatting',
+        'toolbar:bulletListTooltip': 'Bullet list',
+        'toolbar:numberedListTooltip': 'Numbered list',
+        'toolbar:fontFamilyTooltip': 'Font family',
+        'toolbar:fontSizeTooltip': 'Font size',
+        'toolbar:textColorTooltip': 'Text color',
+        'toolbar:highlightColorTooltip': 'Highlight color',
+        'toolbar:removeHighlightTooltip': 'Remove highlight',
+        'toolbar:blockTypeTooltip': 'Block type',
+        'toolbar:paragraphLabel': 'Paragraph',
+        'toolbar:heading1Label': 'Heading 1',
+        'toolbar:heading2Label': 'Heading 2',
+        'toolbar:heading3Label': 'Heading 3',
+        'toolbar:blockquoteLabel': 'Blockquote',
+        'toolbar:bulletListLabel': 'Bullet List',
+        'toolbar:numberedListLabel': 'Numbered List',
+        'toolbar:insertImageTooltip': 'Insert Image',
+        'toolbar:insertTableTooltip': 'Insert Table',
+      };
+      const fullKey = key.includes(':') ? key : `${ns}:${key}`;
+      return labels[fullKey] ?? key;
+    },
+    i18n: { language: 'en', changeLanguage: vi.fn() },
+  }),
+}));
+
 // Mock the API client
 vi.mock('../../api/client', () => ({
   uploadImage: vi.fn(),

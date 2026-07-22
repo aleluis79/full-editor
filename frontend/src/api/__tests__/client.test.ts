@@ -56,7 +56,7 @@ describe('uploadImage', () => {
     });
 
     const file = new File(['dummy'], 'test.png', { type: 'image/png' });
-    await expect(uploadImage(file)).rejects.toThrow('Upload failed');
+    await expect(uploadImage(file)).rejects.toThrow('ERROR_UPLOAD_FAILED');
   });
 
   it('falls back when error response JSON parsing fails', async () => {
@@ -67,6 +67,6 @@ describe('uploadImage', () => {
     });
 
     const file = new File(['dummy'], 'test.png', { type: 'image/png' });
-    await expect(uploadImage(file)).rejects.toThrow('Upload failed');
+    await expect(uploadImage(file)).rejects.toThrow('ERROR_UPLOAD_FAILED');
   });
 });

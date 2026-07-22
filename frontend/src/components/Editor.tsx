@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { useLayoutStore } from '../stores/layout-store';
@@ -46,6 +47,7 @@ interface EditorProps {
 }
 
 export function Editor({ onBack }: EditorProps) {
+  const { t } = useTranslation('document');
   const doc = useDocumentStore((s) => s.document);
   const saveDocument = useDocumentStore((s) => s.saveDocument);
   const insertBlock = useDocumentStore((s) => s.insertBlock);
@@ -1275,7 +1277,7 @@ export function Editor({ onBack }: EditorProps) {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          Read-only — you don't have permission to edit this document.
+          {t('readOnly')}
         </div>
       )}
 
@@ -1296,7 +1298,7 @@ export function Editor({ onBack }: EditorProps) {
             const imgFile = Array.from(files).find((f) => f.type.startsWith('image/'));
             if (imgFile) {
               e.preventDefault();
-              uploadAndInsertImage(imgFile).catch((err: Error) => alert(err.message));
+              uploadAndInsertImage(imgFile).catch((err: Error) => alert(t(`errors:${err.message}`, { defaultValue: err.message })));
               return;
             }
           }
@@ -1308,7 +1310,7 @@ export function Editor({ onBack }: EditorProps) {
                 e.preventDefault();
                 const blob = item.getAsFile();
                 if (blob) {
-                  uploadAndInsertImage(blob).catch((err: Error) => alert(err.message));
+                  uploadAndInsertImage(blob).catch((err: Error) => alert(t(`errors:${err.message}`, { defaultValue: err.message })));
                   return;
                 }
               }

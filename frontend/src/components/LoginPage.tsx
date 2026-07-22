@@ -4,9 +4,11 @@
  * Displays a centered card with a sign-in button that redirects
  * to the Keycloak login page.
  */
+import { useTranslation } from 'react-i18next';
 import { useKeycloak } from '@react-keycloak/web';
 
 export default function LoginPage() {
+  const { t } = useTranslation('login');
   const { keycloak } = useKeycloak();
 
   const handleLogin = () => {
@@ -27,10 +29,10 @@ export default function LoginPage() {
           </svg>
         </div>
 
-        <h1 className="login-title">Full Editor</h1>
+        <h1 className="login-title">{t('title')}</h1>
         <p className="login-subtitle">
-          Professional document editor.<br />
-          Sign in to access your documents.
+          {t('subtitle')}<br />
+          {t('description')}
         </p>
 
         <button className="login-button" onClick={handleLogin}>
@@ -38,11 +40,11 @@ export default function LoginPage() {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          Sign in with Keycloak
+          {t('signInButton')}
         </button>
 
         <p className="login-footer">
-          Secured by Keycloak · OpenID Connect
+          {t('securedBy')}
         </p>
       </div>
     </div>

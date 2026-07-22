@@ -1,0 +1,15 @@
+{
+  "loading": "Loading...",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "close": "Close",
+  "back": "Back",
+  "confirm": "Confirm",
+  "yes": "Yes",
+  "no": "No",
+  "readOnly": "Read-only — you don't have permission to edit this document.",
+  "unknownUser": "User",
+  "signOut": "Sign out",
+  "ok": "OK"
+}

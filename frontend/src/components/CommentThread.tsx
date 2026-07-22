@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CommentData, CommentUpdateData } from '../api/client';
 import { useCommentStore } from '../stores/comment-store';
 import { useAuthStore } from '../stores/auth-store';
@@ -9,18 +10,18 @@ interface CommentThreadProps {
   activeBlockId: string | null;
 }
 
-function relativeTime(dateStr: string): string {
+function relativeTime(dateStr: string, t: (key: string, options?: any) => string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  if (diffSec < 60) return t('justNow');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t('minutesAgo', { count: diffMin });
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffHour < 24) return t('hoursAgo', { count: diffHour });
   const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
+  if (diffDay < 30) return t('daysAgo', { count: diffDay });
   return dateStr.slice(0, 10);
 }
 
@@ -41,6 +42,7 @@ interface CommentItemProps {
 }
 
 function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItemProps) {
+  const { t } = useTranslation('comments');
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -82,8 +84,8 @@ function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItem
       <div className="comment-item-body">
         <div className="comment-item-meta">
           <span className="comment-item-name">{comment.author_display_name}</span>
-          <span className="comment-item-time">{relativeTime(comment.created_at)}</span>
-          {comment.resolved && <span className="comment-item-resolved-badge">Resolved</span>}
+          <span className="comment-item-time">{relativeTime(comment.created_at, t)}</span>
+          {comment.resolved && <span className="comment-item-resolved-badge">{t('resolved')}</span>}
         </div>
 
         {editing ? (
@@ -96,10 +98,10 @@ function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItem
             />
             <div className="comment-reply-actions">
               <button className="comment-btn comment-btn-primary" onClick={handleUpdate}>
-                Save
+                {t('save')}
               </button>
               <button className="comment-btn" onClick={() => setEditing(false)}>
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -114,28 +116,28 @@ function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItem
                 /* Resolved thread: only show Unresolve on the top-level comment */
                 isAuthor && isTopLevel && (
                   <button className="comment-action-btn" onClick={handleResolve}>
-                    Unresolve
+                    {t('unresolve')}
                   </button>
                 )
               ) : (
                 /* Not resolved: show all actions */
                 <>
                   <button className="comment-action-btn" onClick={() => setShowReplyForm(!showReplyForm)}>
-                    Reply
+                    {t('reply')}
                   </button>
                   {isAuthor && (
                     <button className="comment-action-btn" onClick={() => { setEditContent(comment.content); setEditing(true); }}>
-                      Edit
+                      {t('edit')}
                     </button>
                   )}
                   {isAuthor && (
                     <button className="comment-action-btn comment-action-btn--danger" onClick={handleDelete}>
-                      Delete
+                      {t('delete')}
                     </button>
                   )}
                   {isAuthor && isTopLevel && (
                     <button className="comment-action-btn" onClick={handleResolve}>
-                      Resolve
+                      {t('resolve')}
                     </button>
                   )}
                 </>
@@ -148,17 +150,17 @@ function CommentItem({ comment, docId, isTopLevel, threadResolved }: CommentItem
           <div className="comment-reply-form">
             <textarea
               className="comment-reply-textarea"
-              placeholder="Write a reply..."
+              placeholder={t('writeReply')}
               value={replyContent}
               onChange={(e) => setReplyContent(e.target.value)}
               autoFocus
             />
             <div className="comment-reply-actions">
               <button className="comment-btn comment-btn-primary" onClick={handleReply}>
-                Reply
+                {t('reply')}
               </button>
               <button className="comment-btn" onClick={() => setShowReplyForm(false)}>
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePageStore } from '../stores/page-store';
 
 interface PageSettingsPopupProps {
@@ -16,6 +17,7 @@ function pointsToCssPx(points: number): number {
 }
 
 export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
+  const { t } = useTranslation('page');
   const config = usePageStore((s) => s.config);
   const availablePaperSizes = usePageStore((s) => s.availablePaperSizes);
   const updatePaperSize = usePageStore((s) => s.updatePaperSize);
@@ -101,7 +103,7 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
     >
       {/* Paper Size */}
       <div className="page-settings-section">
-        <label className="page-settings-label">Paper Size</label>
+        <label className="page-settings-label">{t('paperSize')}</label>
         <div className="page-settings-paper-group">
           {availablePaperSizes.map((ps) => (
             <button
@@ -117,29 +119,29 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
 
       {/* Orientation */}
       <div className="page-settings-section">
-        <label className="page-settings-label">Orientation</label>
+        <label className="page-settings-label">{t('orientation')}</label>
         <div className="page-settings-orientation-group">
           <button
             className={`page-settings-orientation-btn${!isLandscape ? ' active' : ''}`}
             onClick={() => handleOrientation('portrait')}
           >
-            Portrait
+            {t('portrait')}
           </button>
           <button
             className={`page-settings-orientation-btn${isLandscape ? ' active' : ''}`}
             onClick={() => handleOrientation('landscape')}
           >
-            Landscape
+            {t('landscape')}
           </button>
         </div>
       </div>
 
       {/* Margins */}
       <div className="page-settings-section">
-        <label className="page-settings-label">Margins (points)</label>
+        <label className="page-settings-label">{t('margins')}</label>
         <div className="page-settings-margins-grid">
           <div className="page-settings-margin-field">
-            <label className="page-settings-margin-label">Top</label>
+            <label className="page-settings-margin-label">{t('top')}</label>
             <input
               type="number"
               className="toolbar-select toolbar-select-small"
@@ -151,7 +153,7 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
             />
           </div>
           <div className="page-settings-margin-field">
-            <label className="page-settings-margin-label">Right</label>
+            <label className="page-settings-margin-label">{t('right')}</label>
             <input
               type="number"
               className="toolbar-select toolbar-select-small"
@@ -163,7 +165,7 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
             />
           </div>
           <div className="page-settings-margin-field">
-            <label className="page-settings-margin-label">Bottom</label>
+            <label className="page-settings-margin-label">{t('bottom')}</label>
             <input
               type="number"
               className="toolbar-select toolbar-select-small"
@@ -175,7 +177,7 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
             />
           </div>
           <div className="page-settings-margin-field">
-            <label className="page-settings-margin-label">Left</label>
+            <label className="page-settings-margin-label">{t('left')}</label>
             <input
               type="number"
               className="toolbar-select toolbar-select-small"

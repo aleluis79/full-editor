@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { getSelectionRange, isSelectionEmpty } from '../core/selection';
@@ -51,6 +52,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onBack }: ToolbarProps) {
+  const { t } = useTranslation('toolbar');
   const selection = useEditorStore((s) => s.selection);
   const cursor = useEditorStore((s) => s.cursor);
   const stickyMarks = useEditorStore((s) => s.stickyMarks);
@@ -133,7 +135,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      uploadAndInsertImage(selectedFile).catch((err: Error) => alert(err.message));
+      uploadAndInsertImage(selectedFile).catch((err: Error) => alert(t(`errors:${err.message}`, { defaultValue: err.message })));
     }
     // Reset so the same file can be selected again
     e.target.value = '';
@@ -160,11 +162,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const hasCursor = cursor.position.nodeId !== '';
 
   // ── Active styles at cursor ────────────────────────────────
-  // Derive the marks and attrs at the current cursor position so
-  // the toolbar can reflect what style is under the cursor.
-  // Computed on every render (not memoized) to guarantee fresh results
-  // after document mutations that leave the cursor position unchanged
-  // (e.g. toggling bold on a selection, then clicking to move cursor).
   const activeStyles = (() => {
     const { nodeId, offset } = cursor.position;
     if (!nodeId) return null;
@@ -175,12 +172,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     return getRunStylesAtOffset(block as Paragraph | Heading, offset);
   })();
 
-  // Effective marks: when sticky marks are set, show those (they determine
-  // what will be applied on next keystroke). Otherwise fall back to the
-  // cursor position's text run styles (toolbar reflection).
-  // When the user just toggled a sticky mark OFF (stickyToggledOff), filter
-  // that mark from the cursor styles so the button shows inactive
-  // immediately, even though the cursor is still on text with that style.
   const effectiveMarks = useMemo(() => {
     if (stickyMarks.length > 0 || Object.keys(stickyAttrs).length > 0) {
       return new Set(stickyMarks);
@@ -253,10 +244,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
     if (hasSelection) {
       const { start, end } = getSelectionRange(selection!, doc);
       toggleMark(start.nodeId, start.offset, end.offset, mark, end.nodeId);
-      // Clear sticky state since we acted on a real selection
       clearStickyMarks();
     } else {
-      // No selection: toggle sticky mark — next typed text will use it
       toggleStickyMark(mark);
     }
   };
@@ -267,7 +256,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
       setStyle(start.nodeId, start.offset, end.offset, key, value, end.nodeId);
       clearStickyMarks();
     } else if (hasCursor) {
-      // No selection: set sticky style for next typed text
       setStickyStyle(key, value);
     }
   };
@@ -296,7 +284,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     if (!hasCursor) return;
     const { nodeId } = cursor.position;
 
-    // If there's a multi-block selection, use convertRangeToList
     if (hasSelection) {
       const { start, end } = getSelectionRange(selection!, doc);
       if (start.nodeId !== end.nodeId) {
@@ -305,7 +292,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
       }
     }
 
-    // Check if the cursor is already inside a list — find the parent list
     const allBlocks = getBlockNodes(doc);
     const parentList = allBlocks.find((b) => {
       if (b.type !== 'list') return false;
@@ -318,11 +304,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
     });
 
     if (parentList) {
-      // Toggle off: convert list back to paragraph
       convertBlock(parentList.id, 'paragraph');
     } else {
-      // Toggle on: convert current block to list.
-      // If it's a heading, first convert to paragraph (lists don't nest headings).
       const block = findNode(doc, nodeId);
       if (block?.type === 'heading') {
         convertBlock(nodeId, 'paragraph');
@@ -333,7 +316,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
   // ── Link handlers ──────────────────────────────────────────
   const handleLinkButton = () => {
-    // 1) First: check if cursor is inside an existing link → edit it
     const { nodeId, offset } = cursor.position;
     if (nodeId) {
       const block = findNode(doc, nodeId);
@@ -359,7 +341,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
       }
     }
 
-    // 2) No link under cursor: check if there's a selection to add a link
     if (hasSelection) {
       const { start, end } = getSelectionRange(selection!, doc);
       linkSelectionRef.current = {
@@ -379,7 +360,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     try {
       if (linkSelectionRef.current) {
         if (!url) {
-          // Empty URL → remove the link
           removeLink(linkSelectionRef.current.blockId, linkSelectionRef.current.start, linkSelectionRef.current.end);
         } else {
           setLink(linkSelectionRef.current.blockId, linkSelectionRef.current.start, linkSelectionRef.current.end, url);
@@ -497,7 +477,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     return (block as Paragraph | Heading).attrs?.lineHeight;
   }, [doc, cursor.position.nodeId]);
 
-  /** The effective lineHeight shown in the popup — falls back to block-type default */
   const effectiveLineHeight = useMemo(() => {
     const { nodeId } = cursor.position;
     if (!nodeId) return LINE_HEIGHT_DEFAULTS.paragraph;
@@ -508,7 +487,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     return block.type === 'heading' ? LINE_HEIGHT_DEFAULTS.heading : LINE_HEIGHT_DEFAULTS.paragraph;
   }, [doc, cursor.position.nodeId]);
 
-  /** True when the block has an explicit lineHeight different from default */
   const hasNonDefaultLineHeight = useMemo(() => {
     const { nodeId } = cursor.position;
     if (!nodeId) return false;
@@ -536,7 +514,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
       const l = block as import('../core/types').List;
       return l.ordered ? 'list-ol' : 'list-ul';
     }
-    // For blocks inside list items / blockquotes, walk up to find the parent
     if (block.type === 'paragraph' || block.type === 'listItem') {
       const parent = getBlockNodes(doc).find((b) => {
         if (b.type === 'list' || b.type === 'blockquote') {
@@ -557,11 +534,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
     return 'paragraph';
   }, [doc, cursor.position.nodeId]);
 
-  // Prevent toolbar button clicks from stealing focus from the hidden
-  // textarea. Without this, clicking any <button> blurs the textarea
-  // and keyboard input stops working.
-  // Using closest('button') because the click target may be a child
-  // element inside the button (e.g. SVG, path, span).
   const handleToolbarMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) {
       e.preventDefault();
@@ -576,7 +548,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <button
             className="toolbar-btn toolbar-btn-back"
             onClick={onBack}
-            title="Volver a documentos"
+            title={t('backToDocuments')}
           >
             <Back />
           </button>
@@ -601,7 +573,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <button
             className="toolbar-title-btn"
             onClick={() => setEditingTitle(true)}
-            title="Editar título"
+            title={t('editTitle')}
           >
             {documentTitle}
           </button>
@@ -618,21 +590,21 @@ export function Toolbar({ onBack }: ToolbarProps) {
             className="toolbar-btn toolbar-btn-save"
             onClick={handleSave}
             disabled={!isDirty || isSaving}
-            title={isSaving ? 'Guardando...' : 'Guardar'}
+            title={isSaving ? t('saving') : t('save')}
           >
             {isSaving ? '⏳' : <Save />}
           </button>
           <button
             className="toolbar-btn"
             onClick={handleExportPDF}
-            title="Exportar a PDF"
+            title={t('exportPdf')}
           >
             <Pdf />
           </button>
           <button
             className="toolbar-btn"
             onClick={() => setShowShareDialog(true)}
-            title="Compartir documento"
+            title={t('shareDocument')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="18" cy="5" r="3" />
@@ -646,8 +618,6 @@ export function Toolbar({ onBack }: ToolbarProps) {
             <button
               className={`toolbar-btn${commentVisible ? ' toolbar-btn-active' : ''}`}
               onClick={async () => {
-                // Save the document before showing comments so that any
-                // new comment references persisted block IDs/text.
                 if (!commentVisible) {
                   try {
                     await useDocumentStore.getState().saveDocument();
@@ -661,7 +631,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
                   if (docId) fetchComments(docId);
                 }
               }}
-              title="Toggle comments"
+              title={t('toggleComments')}
             >
               <Comment />
             </button>
@@ -676,7 +646,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <button
             className="toolbar-btn"
             onClick={() => setShowPageSettings(!showPageSettings)}
-            title="Page settings"
+            title={t('pageSettings')}
           >
             <Settings />
           </button>
@@ -688,47 +658,47 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Text formatting — active state reflects cursor position OR sticky marks */}
+      {/* Text formatting */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn${effectiveMarks.has('bold') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('bold')}
-          title="Bold (Ctrl+B)"
+          title={t('boldTooltip')}
         >
           <Bold />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('italic') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('italic')}
-          title="Italic (Ctrl+I)"
+          title={t('italicTooltip')}
         >
           <Italic />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('underline') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('underline')}
-          title="Underline (Ctrl+U)"
+          title={t('underlineTooltip')}
         >
           <Underline />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('strikethrough') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('strikethrough')}
-          title="Strikethrough"
+          title={t('strikethroughTooltip')}
         >
           <Strikethrough />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('superscript') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('superscript')}
-          title="Superscript"
+          title={t('superscriptTooltip')}
         >
           <Superscript />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('subscript') ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleMark('subscript')}
-          title="Subscript"
+          title={t('subscriptTooltip')}
         >
           <Subscript />
         </button>
@@ -742,7 +712,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className={`toolbar-btn${showLinkPopup ? ' toolbar-btn-active' : ''}`}
           onClick={handleLinkButton}
           disabled={!hasCursor && !hasSelection}
-          title="Link (Ctrl+K)"
+          title={t('linkTooltip')}
         >
           <Link />
         </button>
@@ -755,19 +725,19 @@ export function Toolbar({ onBack }: ToolbarProps) {
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
               onKeyDown={handleLinkKeyDown}
-              placeholder="https://..."
+              placeholder={t('linkPlaceholder')}
             />
             <button
               className="toolbar-btn"
               onClick={handleLinkSubmit}
             >
-              OK
+              {t('linkOk')}
             </button>
             <button
               className="toolbar-btn"
               onClick={handleLinkCancel}
             >
-              Cancel
+              {t('linkCancel')}
             </button>
           </div>
         )}
@@ -796,7 +766,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
             }
           }}
           disabled={!selectedTableId && !hasCursor && !hasSelection}
-          title="Alinear a la izquierda"
+          title={t('alignLeftTooltip')}
         >
           <AlignLeft />
         </button>
@@ -819,7 +789,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
             }
           }}
           disabled={!selectedTableId && !hasCursor && !hasSelection}
-          title="Centrar"
+          title={t('alignCenterTooltip')}
         >
           <AlignCenter />
         </button>
@@ -842,7 +812,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
             }
           }}
           disabled={!selectedTableId && !hasCursor && !hasSelection}
-          title="Alinear a la derecha"
+          title={t('alignRightTooltip')}
         >
           <AlignRight />
         </button>
@@ -854,7 +824,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className={`toolbar-btn${hasNonDefaultLineHeight || showLineSpacing ? ' toolbar-btn-active' : ''}`}
           onClick={() => setShowLineSpacing(!showLineSpacing)}
           disabled={!selectedTableId && !hasCursor && !hasSelection}
-          title="Line spacing"
+          title={t('lineSpacingTooltip')}
         >
           <LineHeight />
         </button>
@@ -888,7 +858,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className="toolbar-btn"
           onClick={handleClearFormatting}
           disabled={!hasSelection && stickyMarks.length === 0 && Object.keys(stickyAttrs).length === 0}
-          title="Clear Formatting"
+          title={t('clearFormattingTooltip')}
         >
           <ClearFormatting />
         </button>
@@ -902,7 +872,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className={`toolbar-btn${activeBlockType === 'list-ul' ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleList(false)}
           disabled={!hasCursor}
-          title="Bullet List"
+          title={t('bulletListTooltip')}
         >
           <ListUl />
         </button>
@@ -910,7 +880,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className={`toolbar-btn${activeBlockType === 'list-ol' ? ' toolbar-btn-active' : ''}`}
           onClick={() => handleToggleList(true)}
           disabled={!hasCursor}
-          title="Numbered List"
+          title={t('numberedListTooltip')}
         >
           <ListOl />
         </button>
@@ -918,13 +888,13 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Font — shows active value from cursor position / sticky attrs */}
+      {/* Font */}
       <div className="toolbar-group">
         <select
           className="toolbar-select"
           value={effectiveAttrs.fontFamily ?? 'Georgia'}
           onChange={(e) => handleSetStyle('fontFamily', e.target.value || undefined)}
-          title="Font Family"
+          title={t('fontFamilyTooltip')}
         >
           {FONT_FAMILIES.map((f) => (
             <option key={f} value={f}>{f}</option>
@@ -935,7 +905,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           className="toolbar-select toolbar-select-small"
           value={effectiveAttrs.fontSize ? String(effectiveAttrs.fontSize) : '16'}
           onChange={(e) => handleSetStyle('fontSize', e.target.value ? Number(e.target.value) : undefined)}
-          title="Font Size"
+          title={t('fontSizeTooltip')}
         >
           {FONT_SIZES.map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -945,9 +915,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Text Color — shows active value from cursor position / sticky attrs */}
+      {/* Text Color */}
       <div className="toolbar-group">
-        <label className="toolbar-color-label" title="Text Color">
+        <label className="toolbar-color-label" title={t('textColorTooltip')}>
           <span style={{ color: effectiveAttrs.color ?? '#000' }}>A</span>
           <input
             type="color"
@@ -958,9 +928,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
         </label>
       </div>
 
-      {/* Highlight (background) Color */}
+      {/* Highlight Color */}
       <div className="toolbar-group">
-        <label className="toolbar-color-label" title="Highlight Color">
+        <label className="toolbar-color-label" title={t('highlightColorTooltip')}>
           <span style={{
             backgroundColor: effectiveAttrs.backgroundColor ?? '#fff7d6',
             padding: '0 2px',
@@ -978,7 +948,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <button
             className="toolbar-btn toolbar-btn-highlight-remove"
             onClick={() => handleSetStyle('backgroundColor', undefined)}
-            title="Remove highlight"
+            title={t('removeHighlightTooltip')}
           >
             ×
           </button>
@@ -987,22 +957,22 @@ export function Toolbar({ onBack }: ToolbarProps) {
 
       <div className="toolbar-separator" />
 
-      {/* Block types — custom dropdown with styled options */}
+      {/* Block types */}
       <div className="toolbar-group" style={{ position: 'relative', zIndex: 100 }}>
         <button
           className="toolbar-btn toolbar-btn-select"
           onClick={() => { if (hasCursor) setShowBlockPicker(!showBlockPicker); }}
           disabled={!hasCursor}
-          title="Block Type"
+          title={t('blockTypeTooltip')}
         >
           <span style={{ flex: 1 }}>
-            {activeBlockType === 'paragraph' && 'Paragraph'}
-            {activeBlockType === 'heading1' && 'Heading 1'}
-            {activeBlockType === 'heading2' && 'Heading 2'}
-            {activeBlockType === 'heading3' && 'Heading 3'}
-            {activeBlockType === 'blockquote' && 'Blockquote'}
-            {activeBlockType === 'list-ul' && 'Bullet List'}
-            {activeBlockType === 'list-ol' && 'Numbered List'}
+            {activeBlockType === 'paragraph' && t('paragraphLabel')}
+            {activeBlockType === 'heading1' && t('heading1Label')}
+            {activeBlockType === 'heading2' && t('heading2Label')}
+            {activeBlockType === 'heading3' && t('heading3Label')}
+            {activeBlockType === 'blockquote' && t('blockquoteLabel')}
+            {activeBlockType === 'list-ul' && t('bulletListLabel')}
+            {activeBlockType === 'list-ol' && t('numberedListLabel')}
           </span>
           <span style={{ fontSize: 10 }}>▼</span>
         </button>
@@ -1016,28 +986,28 @@ export function Toolbar({ onBack }: ToolbarProps) {
               className={`block-picker-item${activeBlockType === 'paragraph' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('paragraph'); setShowBlockPicker(false); }}
             >
-              Paragraph
+              {t('paragraphLabel')}
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading1' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 1 }); setShowBlockPicker(false); }}
               style={{ fontSize: 22, fontWeight: 'bold' }}
             >
-              Heading 1
+              {t('heading1Label')}
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading2' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 2 }); setShowBlockPicker(false); }}
               style={{ fontSize: 18, fontWeight: 'bold' }}
             >
-              Heading 2
+              {t('heading2Label')}
             </button>
             <button
               className={`block-picker-item${activeBlockType === 'heading3' ? ' active' : ''}`}
               onClick={() => { handleConvertBlock('heading', { level: 3 }); setShowBlockPicker(false); }}
               style={{ fontSize: 15, fontWeight: 'bold' }}
             >
-              Heading 3
+              {t('heading3Label')}
             </button>
           </div>
         )}
@@ -1057,7 +1027,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn"
           onClick={() => imageInputRef.current?.click()}
-          title="Insert Image"
+          title={t('insertImageTooltip')}
         >
           <Image />
         </button>
@@ -1070,7 +1040,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
         <button
           className="toolbar-btn toolbar-btn-table"
           onClick={() => setShowTablePicker(!showTablePicker)}
-          title="Insert Table"
+          title={t('insertTableTooltip')}
         >
           <Table />
         </button>

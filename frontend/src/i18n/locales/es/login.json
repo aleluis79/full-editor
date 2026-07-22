@@ -1,0 +1,7 @@
+{
+  "title": "Full Editor",
+  "subtitle": "Editor de documentos profesional.",
+  "description": "Inicia sesión para acceder a tus documentos.",
+  "signInButton": "Iniciar sesión con Keycloak",
+  "securedBy": "Protegido por Keycloak · OpenID Connect"
+}

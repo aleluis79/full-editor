@@ -1,0 +1,16 @@
+{
+  "shareDocument": "Share document",
+  "searchUsersPlaceholder": "Search users by name or email...",
+  "canRead": "Can read",
+  "canEdit": "Can edit",
+  "add": "Add",
+  "noUsersFound": "No users found",
+  "peopleWithAccess": "People with access",
+  "loading": "Loading...",
+  "noSharesYet": "No shares yet. Search for a user above.",
+  "unknown": "Unknown",
+  "removeAccess": "Remove access",
+  "errorLoadShares": "Failed to load shares",
+  "errorCreateShare": "Failed to share",
+  "errorRevokeShare": "Failed to revoke share"
+}
