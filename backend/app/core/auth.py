@@ -48,7 +48,14 @@ def _get_public_key(kid: str) -> Optional[dict]:
 
 
 def _validate_token(token: str) -> dict:
-    """Validate a Keycloak JWT and return the decoded claims."""
+    """Validate a Keycloak JWT and return the decoded claims.
+
+    For Keycloak public clients, the ``aud`` claim is typically set to
+    ``"account"`` (the built-in realm client) rather than the requesting
+    client.  The actual client is identified by the ``azp`` (authorized
+    party) claim.  So we skip the audience check in ``jwt.decode`` and
+    validate ``azp`` manually instead.
+    """
     try:
         headers = jwt.get_unverified_headers(token)
         kid = headers.get("kid")
@@ -66,9 +73,21 @@ def _validate_token(token: str) -> dict:
             token,
             rsa_key,
             algorithms=[Algorithms.RS256],
-            audience=KEYCLOAK_CLIENT_ID,
             issuer=KEYCLOAK_ISSUER,
+            # Skip audience verification — Keycloak public client tokens
+            # have aud="account", not the client ID. We validate the
+            # client via azp (authorized party) below instead.
+            options={"verify_aud": False},
         )
+
+        # Validate the client via azp (authorized party) — the aud claim
+        # for Keycloak public clients is "account", not the client ID.
+        if payload.get("azp") != KEYCLOAK_CLIENT_ID:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid client",
+            )
+
         return payload
     except JWTError:
         raise HTTPException(
