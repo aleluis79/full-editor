@@ -398,3 +398,52 @@ export async function resolveComment(
   }
   return response.json();
 }
+
+// ── Custom Words (Spell Check Dictionary) ──────────────────────
+
+export interface CustomWordData {
+  id: string;
+  user_id: string;
+  word: string;
+  lang: string;
+  created_at: string;
+}
+
+/**
+ * Fetch all custom dictionary words for the current user.
+ */
+export async function fetchCustomWords(): Promise<CustomWordData[]> {
+  const response = await authFetch(`${API_BASE}/v1/custom-words`);
+  if (!response.ok) {
+    throw new Error('ERROR_FETCH_CUSTOM_WORDS');
+  }
+  return response.json();
+}
+
+/**
+ * Add a word to the current user's custom dictionary.
+ */
+export async function addCustomWord(word: string, lang: string): Promise<CustomWordData> {
+  const response = await authFetch(`${API_BASE}/v1/custom-words`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ word, lang }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'ERROR_ADD_CUSTOM_WORD' }));
+    throw new Error(err.detail || 'ERROR_ADD_CUSTOM_WORD');
+  }
+  return response.json();
+}
+
+/**
+ * Delete a custom dictionary word by ID.
+ */
+export async function deleteCustomWord(wordId: string): Promise<void> {
+  const response = await authFetch(`${API_BASE}/v1/custom-words/${wordId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error('ERROR_DELETE_CUSTOM_WORD');
+  }
+}

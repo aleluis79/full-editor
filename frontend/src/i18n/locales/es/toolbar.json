@@ -38,5 +38,10 @@
   "bulletListLabel": "Lista con viñetas",
   "numberedListLabel": "Lista numerada",
   "insertImageTooltip": "Insertar imagen",
-  "insertTableTooltip": "Insertar tabla"
+  "insertTableTooltip": "Insertar tabla",
+  "spellCheckEnable": "Activar corrector ortográfico",
+  "spellCheckDisable": "Desactivar corrector ortográfico",
+  "suggestions": "Sugerencias",
+  "addToDictionary": "Agregar al diccionario",
+  "noSuggestions": "Sin sugerencias"
 }

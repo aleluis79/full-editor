@@ -19,6 +19,8 @@ import { SelectionOverlay } from './SelectionOverlay';
 import { Toolbar } from './Toolbar';
 import { CommentSidebar } from './CommentSidebar';
 import { useCommentStore } from '../stores/comment-store';
+import { useSpellCheck } from '../hooks/useSpellCheck';
+import { setComposing } from '../core/composition';
 import type { Table, DocumentRoot, Paragraph as ParagraphType, Heading as HeadingType } from '../core/types';
 
 /** Walk the document tree to find if a nodeId lives inside a table cell. */
@@ -1219,6 +1221,9 @@ export function Editor({ onBack }: EditorProps) {
     }
   }, [activeBlockId, _commentVisible, commentSetActiveBlock]);
 
+  // ── Spell check hook (manages worker lifecycle, debounce, custom words) ──
+  useSpellCheck();
+
   // Sync browser native selection to editor state — without this, text
   // selected by mouse drag is invisible to the toolbar and keyboard
   // shortcuts (Ctrl+B, etc.), because the editor's `selection` in
@@ -1318,9 +1323,13 @@ export function Editor({ onBack }: EditorProps) {
           }
           // Fall through — the keydown Ctrl+V handler will handle text paste
         }}
-        onCompositionStart={() => { isComposingRef.current = true; }}
+        onCompositionStart={() => {
+          isComposingRef.current = true;
+          setComposing(true);
+        }}
         onCompositionEnd={(e) => {
           isComposingRef.current = false;
+          setComposing(false);
           const text = e.data;
           if (!text || !cursor.position.nodeId) return;
 

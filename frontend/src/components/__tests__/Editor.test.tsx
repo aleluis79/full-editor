@@ -7,15 +7,21 @@ import { useEditorStore } from '../../stores/editor-store';
 import { uploadImage } from '../../api/client';
 
 // Mock the API client
-vi.mock('../../api/client', () => ({
-  uploadImage: vi.fn(),
-  fetchDocuments: vi.fn().mockResolvedValue([]),
-  fetchDocument: vi.fn(),
-  createDocument: vi.fn(),
-  updateDocument: vi.fn(),
-  deleteDocument: vi.fn(),
-  exportPDF: vi.fn(),
-}));
+vi.mock('../../api/client', () => {
+  const mock = {
+    uploadImage: vi.fn(),
+    fetchDocuments: vi.fn().mockResolvedValue([]),
+    fetchDocument: vi.fn(),
+    createDocument: vi.fn(),
+    updateDocument: vi.fn(),
+    deleteDocument: vi.fn(),
+    exportPDF: vi.fn(),
+    fetchCustomWords: vi.fn().mockResolvedValue([]),
+    addCustomWord: vi.fn().mockResolvedValue({}),
+    deleteCustomWord: vi.fn().mockResolvedValue(undefined),
+  };
+  return mock;
+});
 
 // Stub out heavy sub-components so Editor can be rendered in isolation
 vi.mock('../DocumentView', () => ({
@@ -26,6 +32,10 @@ vi.mock('../Toolbar', () => ({
 }));
 vi.mock('../SelectionOverlay', () => ({
   SelectionOverlay: function SelectionOverlay() { return null; },
+}));
+// Stub useSpellCheck hook since it requires Worker + API in tests
+vi.mock('../../hooks/useSpellCheck', () => ({
+  useSpellCheck: function useSpellCheck() { return {}; },
 }));
 
 // Mock page store with a proper Zustand hook

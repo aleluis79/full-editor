@@ -7,6 +7,7 @@ from .api.images import router as images_router
 from .api.auth import router as auth_router
 from .api.shares import router as shares_router
 from .api.comments import router as comments_router
+from .api.custom_words import router as custom_words_router
 
 
 app = FastAPI(
@@ -34,6 +35,7 @@ app.include_router(images_router, prefix="/api")
 app.include_router(auth_router)
 app.include_router(shares_router)
 app.include_router(comments_router)
+app.include_router(custom_words_router)
 
 # Mount uploads directory as static files
 from pathlib import Path  # noqa: E402

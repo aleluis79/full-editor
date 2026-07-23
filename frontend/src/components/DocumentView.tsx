@@ -15,6 +15,11 @@ import { ImageBlock } from './ImageBlock';
 import { TableBlock } from './TableBlock';
 import { CommentIndicator } from './CommentIndicator';
 import { useCommentStore } from '../stores/comment-store';
+import type { Misspelling } from '../stores/spell-check-store';
+import { useSpellCheckStore } from '../stores/spell-check-store';
+
+// Stable empty array reference to avoid infinite re-render loops
+const MISSING_NONE: Misspelling[] = [];
 
 interface DocumentViewProps {
   blocks: BlockNode[];
@@ -450,6 +455,11 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
   const cursor = useEditorStore((s) => s.cursor);
   const selection = useEditorStore((s) => s.selection);
   const focused = useEditorStore((s) => s.focused);
+  const spellCheckEnabled = useSpellCheckStore((s) => s.enabled);
+  const allMisspellings = useSpellCheckStore((s) => s.misspellings);
+  const blockMisspellings = allMisspellings[block.id] ?? MISSING_NONE;
+
+
   const paraRef = useRef<HTMLDivElement>(null);
   const [cursorRect, setCursorRect] = useState<{ x: number; y: number; height: number } | null>(null);
 
@@ -580,6 +590,14 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
     const selRange = getBlockSelRange();
     const SEL_BG = 'rgba(0, 120, 215, 0.3)';
 
+    // Build a set of character ranges that are misspelled
+    const misspelledRanges = new Map<number, { word: string; end: number }>();
+    if (spellCheckEnabled && blockMisspellings.length > 0) {
+      for (const m of blockMisspellings) {
+        misspelledRanges.set(m.start, { word: m.word, end: m.end });
+      }
+    }
+
     const parts: React.ReactNode[] = [];
     let globalOffset = 0;
 
@@ -613,52 +631,151 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
         }
       };
 
-      if (!selRange || runEnd <= selRange[0] || runStart >= selRange[1]) {
-        // Entire run outside selection — single span
-        parts.push(
-          run.href ? (
-            <a
-              key={run.id || index}
-              href={run.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-run"
-              onClick={handleLinkClick}
-              style={{ ...baseStyle, color: 'blue', textDecoration: 'underline', cursor: 'pointer' }}
-            >
-              {content}
-            </a>
-          ) : (
-            <span key={run.id || index} className="text-run" style={baseStyle}>
-              {content}
-            </span>
-          )
-        );
-      } else {
-        // Run overlaps selection — split into up to 3 parts
-        const selStart = Math.max(0, selRange[0] - runStart);
-        const selEnd = Math.min(runLen, selRange[1] - runStart);
-        const linkStyle: React.CSSProperties = run.href ? { color: 'blue', textDecoration: 'underline', cursor: 'pointer' } : {};
-        const wrapEl = (key: string, text: string, extraStyle?: React.CSSProperties) => {
-          const mergedStyle = { ...baseStyle, ...linkStyle, ...extraStyle };
-          if (run.href) {
-            return (
-              <a key={key} href={run.href} target="_blank" rel="noopener noreferrer" className="text-run" onClick={handleLinkClick} style={mergedStyle}>
-                {text}
-              </a>
+      // Build list of segments for this run — split by misspellings and selection
+      const segments: Array<{ start: number; end: number; isMisspelled: boolean; isSelected: boolean }> = [];
+
+      // Collect all relevant boundaries within this run
+      const boundaries = new Set<number>();
+      boundaries.add(0);
+      boundaries.add(runLen);
+
+      // Misspelling boundaries
+      if (misspelledRanges.size > 0) {
+        for (const [ms, { end: me }] of misspelledRanges.entries()) {
+          if (ms < runEnd && me > runStart) {
+            const localStart = Math.max(0, ms - runStart);
+            const localEnd = Math.min(runLen, me - runStart);
+            boundaries.add(localStart);
+            boundaries.add(localEnd);
+          }
+        }
+      }
+
+      // Selection boundaries
+      if (selRange && runEnd > selRange[0] && runStart < selRange[1]) {
+        boundaries.add(Math.max(0, selRange[0] - runStart));
+        boundaries.add(Math.min(runLen, selRange[1] - runStart));
+      }
+
+      const sortedBounds = Array.from(boundaries).sort((a, b) => a - b);
+
+      // Remove duplicates and create segments
+      for (let i = 0; i < sortedBounds.length - 1; i++) {
+        const segStart = sortedBounds[i];
+        const segEnd = sortedBounds[i + 1];
+        if (segStart === segEnd) continue;
+
+        const globalSegStart = runStart + segStart;
+        const globalSegEnd = runStart + segEnd;
+
+        const isMisspelled = misspelledRanges.has(globalSegStart);
+        const isSelected = selRange
+          ? globalSegStart < selRange[1] && globalSegEnd > selRange[0]
+          : false;
+
+        segments.push({
+          start: segStart,
+          end: segEnd,
+          isMisspelled,
+          isSelected,
+        });
+      }
+
+      if (!selRange && misspelledRanges.size === 0) {
+        // Fast path: no selection, no misspellings — single span
+        segments.length = 0;
+      }
+
+      if (segments.length === 0) {
+        // No splitting needed
+        if (spellCheckEnabled && blockMisspellings.length > 0) {
+          // Even without explicit split, check if the entire run is misspelled
+          // This happens when the run content IS the misspelled word exactly
+          const misspelling = blockMisspellings.find(
+            (m) => m.start === runStart && m.end === runEnd
+          );
+          if (misspelling) {
+            parts.push(
+              renderRunContent(run, index, content, baseStyle, true, false, handleLinkClick)
+            );
+          } else {
+            parts.push(
+              renderRunContent(run, index, content, baseStyle, false, false, handleLinkClick)
             );
           }
-          return <span key={key} className="text-run" style={mergedStyle}>{text}</span>;
-        };
-
-        if (selStart > 0) {
-          parts.push(wrapEl(`${run.id || index}-pre`, content.slice(0, selStart)));
+        } else {
+          parts.push(
+            renderRunContent(run, index, content, baseStyle, false, false, handleLinkClick)
+          );
         }
-        parts.push(
-          wrapEl(`${run.id || index}-sel`, content.slice(selStart, selEnd), { backgroundColor: SEL_BG })
-        );
-        if (selEnd < runLen) {
-          parts.push(wrapEl(`${run.id || index}-post`, content.slice(selEnd)));
+      } else {
+        // Split by segments
+        for (const seg of segments) {
+          const text = content.slice(seg.start, seg.end);
+          const segStyle: React.CSSProperties = { ...baseStyle };
+          if (seg.isSelected) {
+            segStyle.backgroundColor = SEL_BG;
+          }
+          const segKey = `${run.id || index}-${seg.start}`;
+
+          if (seg.isMisspelled) {
+            // Freeze segment values at creation time to avoid closure issues
+            const segStart = seg.start;
+            const segEnd = seg.end;
+
+            // Render misspelled segment with special class
+            const handleSpellClick = (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const globalStart = runStart + segStart;
+              const globalEnd = runStart + segEnd;
+              const popoverData = {
+                blockId: block.id,
+                start: globalStart,
+                end: globalEnd,
+                suggestions: blockMisspellings.find(
+                  (m) => m.start === globalStart
+                )?.suggestions ?? [],
+              };
+              const store = useSpellCheckStore.getState();
+              store.showPopover(popoverData, { x: e.clientX, y: e.clientY });
+            };
+
+            const handleSpellContextMenu = (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const globalStart = runStart + segStart;
+              const globalEnd = runStart + segEnd;
+              const store = useSpellCheckStore.getState();
+              store.showPopover(
+                {
+                  blockId: block.id,
+                  start: globalStart,
+                  end: globalEnd,
+                  suggestions: blockMisspellings.find(
+                    (m) => m.start === globalStart
+                  )?.suggestions ?? [],
+                },
+                { x: e.clientX, y: e.clientY },
+              );
+            };
+
+            parts.push(
+              <span
+                key={segKey}
+                className="text-run spell-misspelled"
+                style={segStyle}
+                onClick={handleSpellClick}
+                onContextMenu={handleSpellContextMenu}
+              >
+                {text}
+              </span>
+            );
+          } else {
+            parts.push(
+              renderRunContent(run, index, text, segStyle, false, false, handleLinkClick, segKey)
+            );
+          }
         }
       }
 
@@ -667,6 +784,33 @@ function LayoutParagraph({ block, layout: _layout, isActive, onMouseDown, onClic
 
     return <>{parts}</>;
   };
+
+  // Helper to render a span or anchor with optional misspelling class
+  function renderRunContent(
+    run: typeof block.children[0],
+    index: number,
+    text: string,
+    style: React.CSSProperties,
+    isMisspelled: boolean,
+    _isSelected: boolean,
+    onLinkClick: (e: React.MouseEvent) => void,
+    keyOverride?: string,
+  ): React.ReactNode {
+    const key = keyOverride ?? (run.id || index);
+    const className = `text-run${isMisspelled ? ' spell-misspelled' : ''}`;
+    const linkStyle: React.CSSProperties = run.href
+      ? { ...style, color: 'blue', textDecoration: 'underline', cursor: 'pointer' }
+      : style;
+
+    if (run.href) {
+      return (
+        <a key={key} href={run.href} target="_blank" rel="noopener noreferrer" className={className} onClick={onLinkClick} style={linkStyle}>
+          {text}
+        </a>
+      );
+    }
+    return <span key={key} className={className} style={style}>{text}</span>;
+  }
 
   return (
     <div

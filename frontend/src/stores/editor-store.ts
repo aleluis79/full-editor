@@ -60,6 +60,13 @@ interface EditorState {
   /** Reset stickyBreakOut after it has been consumed by insertText */
   consumeStickyBreakOut: () => void;
 
+  // Spell check toggle
+  spellCheckEnabled: boolean;
+
+  // Spell check toggle
+  spellCheckEnabled: boolean;
+  setSpellCheckEnabled: (enabled: boolean) => void;
+
   // Link popup actions
   activateLinkPopup: (range: LinkRange) => void;
   deactivateLinkPopup: () => void;
@@ -78,6 +85,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   stickyAttrs: {},
   stickyBreakOut: false,
   stickyToggledOff: null,
+  spellCheckEnabled: true,
   showLinkPopup: false,
   pendingLinkRange: null,
 
@@ -185,5 +193,9 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   deactivateLinkPopup: () => {
     set({ showLinkPopup: false, pendingLinkRange: null });
+  },
+
+  setSpellCheckEnabled: (enabled) => {
+    set({ spellCheckEnabled: enabled });
   },
 }));

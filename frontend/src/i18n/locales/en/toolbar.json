@@ -38,5 +38,10 @@
   "bulletListLabel": "Bullet List",
   "numberedListLabel": "Numbered List",
   "insertImageTooltip": "Insert Image",
-  "insertTableTooltip": "Insert Table"
+  "insertTableTooltip": "Insert Table",
+  "spellCheckEnable": "Enable spell check",
+  "spellCheckDisable": "Disable spell check",
+  "suggestions": "Suggestions",
+  "addToDictionary": "Add to dictionary",
+  "noSuggestions": "No suggestions"
 }

@@ -8,6 +8,8 @@ import { exportPDF } from '../api/client';
 import { usePageStore } from '../stores/page-store';
 import { useLayoutStore } from '../stores/layout-store';
 import { useCommentStore } from '../stores/comment-store';
+import { useSpellCheckStore } from '../stores/spell-check-store';
+import { SpellCheckPopover } from './SpellCheckPopover';
 import type { MarkType, StyleAttrs, BlockType, Paragraph, Heading } from '../core/types';
 import {
   Bold,
@@ -128,6 +130,43 @@ export function Toolbar({ onBack }: ToolbarProps) {
       linkInputRef.current?.focus();
     }
   }, [showLinkPopup]);
+
+  // ── Spell check state ──────────────────────────────────────
+  const spellCheckEnabled = useSpellCheckStore((s) => s.enabled);
+  const spellCheckToggle = useSpellCheckStore((s) => s.toggle);
+  const spellCheckPopover = useSpellCheckStore((s) => s.popover);
+  const popoverPosition = useSpellCheckStore((s) => s.popoverPosition);
+  const hideSpellCheckPopover = useSpellCheckStore((s) => s.hidePopover);
+
+  const replaceTextWithSuggestion = useCallback(
+    (blockId: string, start: number, end: number, replacement: string) => {
+      if (!blockId) {
+        console.warn('[SpellCheck] Invalid suggestion data', { blockId, start, end, replacement });
+        hideSpellCheckPopover();
+        return;
+      }
+      const doc = useDocumentStore.getState();
+      if (doc.replaceSelection) {
+        const selection: import('../core/types').Selection = {
+          anchor: { nodeId: blockId, offset: start },
+          focus: { nodeId: blockId, offset: end },
+        };
+        doc.replaceSelection(selection, replacement);
+      }
+      hideSpellCheckPopover();
+    },
+    [hideSpellCheckPopover],
+  );
+
+  const handleAddToDictionary = useCallback(
+    (word: string) => {
+      if (!word) return;
+      const addToDict = useSpellCheckStore.getState().addCustomWord;
+      addToDict(word);
+      hideSpellCheckPopover();
+    },
+    [hideSpellCheckPopover],
+  );
 
   // ── Image input ref ────────────────────────────────────────
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1076,6 +1115,32 @@ export function Toolbar({ onBack }: ToolbarProps) {
           </div>
         )}
       </div>
+
+      {/* Spell check toggle */}
+      <div className="toolbar-separator" />
+      <div className="toolbar-group">
+        <button
+          className={`toolbar-btn${spellCheckEnabled ? ' toolbar-btn-active' : ''}`}
+          onClick={spellCheckToggle}
+          title={spellCheckEnabled ? t('spellCheckDisable') : t('spellCheckEnable')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Spell check popover — rendered at toolbar level for z-index */}
+      {spellCheckPopover && popoverPosition && (
+        <SpellCheckPopover
+          position={popoverPosition}
+          popover={spellCheckPopover}
+          onSelect={replaceTextWithSuggestion}
+          onAddToDictionary={handleAddToDictionary}
+          onClose={hideSpellCheckPopover}
+        />
+      )}
 
       {/* Share dialog */}
       <ShareDialog

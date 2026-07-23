@@ -602,6 +602,16 @@ body {
   white-space: pre-wrap;
 }
 
+/* ── Spell Check: misspelled word wavy red underline ─────── */
+
+.spell-misspelled {
+  /* Use text-decoration — marks only the specific word, not the whole line.
+     The `text-underline-position: under` ensures it stays below the text. */
+  text-decoration: underline wavy #e74c3c;
+  text-underline-position: under;
+  cursor: pointer;
+}
+
 /* ============================================================
    Cursor Overlay
    ============================================================ */
