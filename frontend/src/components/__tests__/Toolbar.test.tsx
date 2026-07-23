@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { Toolbar } from '../Toolbar';
 import { useDocumentStore } from '../../stores/document-store';
 import { useEditorStore } from '../../stores/editor-store';
+import { exportPDF } from '../../api/client';
 
 // Mock react-i18next so useTranslation returns English labels from the translation keys
 vi.mock('react-i18next', () => ({
@@ -75,11 +76,16 @@ vi.mock('../../stores/page-store', () => ({
   usePageStore: create(() => ({
     config: { paperSize: { name: 'A4', width: 595, height: 842 }, orientation: 'portrait', margins: { top: 96, right: 96, bottom: 96, left: 96 }, headerFooter: { enabled: false, firstPageDifferent: true, header: { runs: [], height: 36 }, footer: { runs: [], height: 36 }, pageNumberPosition: 'bottom-center' } },
     pages: [],
+    editingHeaderFooter: null,
+    hfCursorOffset: 0,
     availablePaperSizes: [{ name: 'A4', width: 794, height: 1123 }, { name: 'Letter', width: 816, height: 1056 }, { name: 'Legal', width: 816, height: 1344 }],
     paginate: vi.fn(),
     updatePaperSize: vi.fn(),
     updateOrientation: vi.fn(),
     updateMargins: vi.fn(),
+    setEditingHeaderFooter: vi.fn(),
+    updateHeaderFooterRuns: vi.fn(),
+    setHfCursorOffset: vi.fn(),
   })),
 }));
 
@@ -345,5 +351,334 @@ describe('Toolbar page settings gear button', () => {
     // After clicking, the popup should show paper size controls
     expect(screen.getByText('A4')).toBeTruthy();
     expect(screen.getByText('Letter')).toBeTruthy();
+  });
+});
+
+describe('Toolbar PDF export with header/footer', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [
+          {
+            id: 'block-1',
+            type: 'paragraph',
+            children: [{ id: 'run-1', type: 'text', content: 'Test', marks: [], attrs: {} }],
+            attrs: {},
+          },
+        ],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+      isDirty: false,
+      isSaving: false,
+      documentTitle: 'Test Document',
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: 'block-1', offset: 0 });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('includes header_footer in export payload when enabled', async () => {
+    // Mock page store with headerFooter enabled
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: true,
+          firstPageDifferent: false,
+          header: { runs: [{ id: 'r1', type: 'text', content: 'Title', marks: [], attrs: {} }], height: 36 },
+          footer: { runs: [{ id: 'r2', type: 'text', content: 'Page {pageNumber}', marks: [], attrs: {} }], height: 24 },
+          pageNumberPosition: 'bottom-center',
+        },
+      },
+    });
+
+    render(<Toolbar />);
+    
+    // Click PDF export button
+    const buttons = screen.getAllByRole('button');
+    const pdfBtn = buttons.find((btn) => btn.getAttribute('title') === 'Export to PDF');
+    expect(pdfBtn).toBeTruthy();
+    fireEvent.click(pdfBtn!);
+
+    // Wait for async export
+    await vi.waitFor(() => {
+      expect(exportPDF).toHaveBeenCalled();
+    });
+
+    const callArgs = (exportPDF as ReturnType<typeof vi.fn>).mock.calls[0];
+    const payload = callArgs[0];
+    
+    expect(payload.header_footer).toBeDefined();
+    expect(payload.header_footer.enabled).toBe(true);
+    expect(payload.header_footer.header.runs[0].content).toBe('Title');
+    expect(payload.header_footer.footer.runs[0].content).toBe('Page {pageNumber}');
+  });
+
+  it('omits header_footer when disabled', async () => {
+    // Mock page store with headerFooter disabled
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: false,
+          firstPageDifferent: true,
+          header: { runs: [], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center',
+        },
+      },
+    });
+
+    render(<Toolbar />);
+    
+    const buttons = screen.getAllByRole('button');
+    const pdfBtn = buttons.find((btn) => btn.getAttribute('title') === 'Export to PDF');
+    fireEvent.click(pdfBtn!);
+
+    await vi.waitFor(() => {
+      expect(exportPDF).toHaveBeenCalled();
+    });
+
+    const callArgs = (exportPDF as ReturnType<typeof vi.fn>).mock.calls[0];
+    const payload = callArgs[0];
+    
+    expect(payload.header_footer).toBeUndefined();
+  });
+});
+
+describe('Toolbar contextual mode for header/footer editing', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [
+          {
+            id: 'block-1',
+            type: 'paragraph',
+            children: [{ id: 'run-1', type: 'text', content: 'Hello', marks: [], attrs: {} }],
+            attrs: {},
+          },
+        ],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+      isDirty: false,
+      isSaving: false,
+      documentTitle: 'Test',
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: 'block-1', offset: 0 });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('shows token buttons when editingHeaderFooter is "header"', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({ editingHeaderFooter: 'header' });
+
+    render(<Toolbar />);
+
+    // Token buttons should be visible
+    expect(screen.getByTestId('toolbar-token-pageNumber')).toBeTruthy();
+    expect(screen.getByTestId('toolbar-token-totalPages')).toBeTruthy();
+    expect(screen.getByTestId('toolbar-token-date')).toBeTruthy();
+    expect(screen.getByTestId('toolbar-token-time')).toBeTruthy();
+  });
+
+  it('hides document-specific buttons when editingHeaderFooter is active', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({ editingHeaderFooter: 'footer' });
+
+    render(<Toolbar />);
+
+    // Block type selector should be hidden
+    expect(screen.queryByTitle('Block type')).toBeNull();
+    // List buttons should be hidden
+    expect(screen.queryByTitle('Bullet list')).toBeNull();
+    expect(screen.queryByTitle('Numbered list')).toBeNull();
+    // Image button should be hidden
+    expect(screen.queryByTitle('Insert Image')).toBeNull();
+    // Table button should be hidden
+    expect(screen.queryByTitle('Insert Table')).toBeNull();
+  });
+
+  it('shows limited mark toggles when editingHeaderFooter is active', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({ editingHeaderFooter: 'header' });
+
+    render(<Toolbar />);
+
+    // Basic mark toggles should still be visible
+    expect(screen.getByTitle('Bold (Ctrl+B)')).toBeTruthy();
+    expect(screen.getByTitle('Italic (Ctrl+I)')).toBeTruthy();
+    expect(screen.getByTitle('Underline (Ctrl+U)')).toBeTruthy();
+    // Strikethrough, superscript, subscript should be hidden in header/footer mode
+    expect(screen.queryByTitle('Strikethrough')).toBeNull();
+    expect(screen.queryByTitle('Superscript')).toBeNull();
+    expect(screen.queryByTitle('Subscript')).toBeNull();
+  });
+
+  it('shows all buttons when editingHeaderFooter is null', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({ editingHeaderFooter: null });
+
+    render(<Toolbar />);
+
+    // Document buttons should be visible
+    expect(screen.getByTitle('Block type')).toBeTruthy();
+    expect(screen.getByTitle('Insert Image')).toBeTruthy();
+    // Token buttons should NOT be visible
+    expect(screen.queryByTestId('toolbar-token-pageNumber')).toBeNull();
+  });
+});
+
+describe('Toolbar token insertion at cursor position', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useDocumentStore.setState({
+      document: {
+        id: 'doc-test',
+        type: 'document',
+        children: [
+          {
+            id: 'block-1',
+            type: 'paragraph',
+            children: [{ id: 'run-1', type: 'text', content: 'Hello', marks: [], attrs: {} }],
+            attrs: {},
+          },
+        ],
+        config: {},
+        attrs: {},
+      },
+      currentDocId: 'doc-1',
+      isEditorReady: true,
+      isDirty: false,
+      isSaving: false,
+      documentTitle: 'Test',
+    });
+
+    useEditorStore.getState().setCursorPosition({ nodeId: 'block-1', offset: 0 });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('inserts token at cursor position, not at end', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({
+      editingHeaderFooter: 'header',
+      hfCursorOffset: 5,
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: true,
+          firstPageDifferent: false,
+          header: { runs: [{ id: 'r1', type: 'text', content: 'Hello World', marks: [] }], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center',
+        },
+      },
+    });
+
+    const updateHeaderFooterRunsSpy = vi.spyOn(usePageStore.getState(), 'updateHeaderFooterRuns');
+
+    render(<Toolbar />);
+
+    const pageNumberBtn = screen.getByTestId('toolbar-token-pageNumber');
+    fireEvent.click(pageNumberBtn);
+
+    expect(updateHeaderFooterRunsSpy).toHaveBeenCalledWith('header', expect.any(Array));
+    const newRuns = updateHeaderFooterRunsSpy.mock.calls[0][1];
+    const allText = newRuns.map((r) => r.content).join('');
+    expect(allText).toBe('Hello{pageNumber} World');
+  });
+
+  it('inserts token at start when cursor is at 0', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({
+      editingHeaderFooter: 'header',
+      hfCursorOffset: 0,
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: true,
+          firstPageDifferent: false,
+          header: { runs: [{ id: 'r1', type: 'text', content: 'Hello', marks: [] }], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center',
+        },
+      },
+    });
+
+    const updateHeaderFooterRunsSpy = vi.spyOn(usePageStore.getState(), 'updateHeaderFooterRuns');
+
+    render(<Toolbar />);
+
+    const pageNumberBtn = screen.getByTestId('toolbar-token-pageNumber');
+    fireEvent.click(pageNumberBtn);
+
+    const newRuns = updateHeaderFooterRunsSpy.mock.calls[0][1];
+    const allText = newRuns.map((r) => r.content).join('');
+    expect(allText).toBe('{pageNumber}Hello');
+  });
+
+  it('appends token at end when cursor is at end of text', async () => {
+    const { usePageStore } = await import('../../stores/page-store');
+    usePageStore.setState({
+      editingHeaderFooter: 'header',
+      hfCursorOffset: 5,
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: true,
+          firstPageDifferent: false,
+          header: { runs: [{ id: 'r1', type: 'text', content: 'Hello', marks: [] }], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center',
+        },
+      },
+    });
+
+    const updateHeaderFooterRunsSpy = vi.spyOn(usePageStore.getState(), 'updateHeaderFooterRuns');
+
+    render(<Toolbar />);
+
+    const pageNumberBtn = screen.getByTestId('toolbar-token-pageNumber');
+    fireEvent.click(pageNumberBtn);
+
+    const newRuns = updateHeaderFooterRunsSpy.mock.calls[0][1];
+    const allText = newRuns.map((r) => r.content).join('');
+    expect(allText).toBe('Hello{pageNumber}');
   });
 });

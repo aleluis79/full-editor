@@ -23,6 +23,8 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
   const updatePaperSize = usePageStore((s) => s.updatePaperSize);
   const updateOrientation = usePageStore((s) => s.updateOrientation);
   const updateMargins = usePageStore((s) => s.updateMargins);
+  const headerFooter = usePageStore((s) => s.config.headerFooter);
+  const updateHeaderFooter = usePageStore((s) => s.updateHeaderFooter);
 
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -39,6 +41,14 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
     setMarginBottom(cssPxToPoints(config.margins.bottom));
     setMarginLeft(cssPxToPoints(config.margins.left));
   }, [config.margins]);
+
+  const [headerHeight, setHeaderHeight] = useState(() => cssPxToPoints(headerFooter.header.height));
+  const [footerHeight, setFooterHeight] = useState(() => cssPxToPoints(headerFooter.footer.height));
+
+  useEffect(() => {
+    setHeaderHeight(cssPxToPoints(headerFooter.header.height));
+    setFooterHeight(cssPxToPoints(headerFooter.footer.height));
+  }, [headerFooter]);
 
   // Close on outside click
   useEffect(() => {
@@ -90,6 +100,26 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
   };
 
   const isLandscape = config.orientation === 'landscape';
+
+  const handleHeaderHeightBlur = (value: string) => {
+    const pts = Math.max(0, parseInt(value, 10) || 0);
+    setHeaderHeight(pts);
+    updateHeaderFooter({ header: { ...headerFooter.header, height: pointsToCssPx(pts) } });
+  };
+
+  const handleFooterHeightBlur = (value: string) => {
+    const pts = Math.max(0, parseInt(value, 10) || 0);
+    setFooterHeight(pts);
+    updateHeaderFooter({ footer: { ...headerFooter.footer, height: pointsToCssPx(pts) } });
+  };
+
+  const handleEnabledToggle = (checked: boolean) => {
+    updateHeaderFooter({ enabled: checked });
+  };
+
+  const handleFirstPageDifferent = (checked: boolean) => {
+    updateHeaderFooter({ firstPageDifferent: checked });
+  };
 
   return (
     <div
@@ -189,6 +219,69 @@ export function PageSettingsPopup({ onClose }: PageSettingsPopupProps) {
             />
           </div>
         </div>
+      </div>
+
+      {/* Headers / Footers */}
+      <div className="page-settings-section">
+        <label className="page-settings-label">{t('headersFooters')}</label>
+
+        <label className="page-settings-checkbox">
+          <input
+            type="checkbox"
+            data-testid="hf-enabled-toggle"
+            checked={headerFooter.enabled}
+            onChange={(e) => handleEnabledToggle(e.target.checked)}
+          />
+          {t('enableHeadersFooters')}
+        </label>
+
+        {headerFooter.enabled && (
+          <>
+            <label className="page-settings-checkbox">
+              <input
+                type="checkbox"
+                data-testid="hf-first-page-different"
+                checked={headerFooter.firstPageDifferent}
+                onChange={(e) => handleFirstPageDifferent(e.target.checked)}
+              />
+              {t('differentFirstPage')}
+            </label>
+
+            <div className="page-settings-hf-editor">
+              <label className="page-settings-margin-label">{t('header')}</label>
+              <div className="page-settings-hf-height">
+                <label className="page-settings-margin-label">{t('height')}</label>
+                <input
+                  type="number"
+                  className="toolbar-select toolbar-select-small"
+                  data-testid="hf-header-height"
+                  value={headerHeight}
+                  min={0}
+                  onChange={(e) => setHeaderHeight(parseInt(e.target.value, 10) || 0)}
+                  onBlur={(e) => handleHeaderHeightBlur(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </div>
+            </div>
+
+            <div className="page-settings-hf-editor">
+              <label className="page-settings-margin-label">{t('footer')}</label>
+              <div className="page-settings-hf-height">
+                <label className="page-settings-margin-label">{t('height')}</label>
+                <input
+                  type="number"
+                  className="toolbar-select toolbar-select-small"
+                  data-testid="hf-footer-height"
+                  value={footerHeight}
+                  min={0}
+                  onChange={(e) => setFooterHeight(parseInt(e.target.value, 10) || 0)}
+                  onBlur={(e) => handleFooterHeightBlur(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

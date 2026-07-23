@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { usePageStore } from '../page-store';
+import type { TextRun } from '../../core/types';
 
 // Shared mock functions
 const mockUpdateConstraints = vi.fn();
@@ -130,6 +131,130 @@ describe('page-store updateMargins clamping', () => {
     expect(state.config.margins.right).toBe(72);
     expect(state.config.margins.bottom).toBe(100);
     expect(state.config.margins.left).toBe(48);
+    expect(mockMarkDirty).toHaveBeenCalled();
+  });
+});
+
+describe('page-store editingHeaderFooter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    usePageStore.setState({
+      editingHeaderFooter: null,
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: true,
+          firstPageDifferent: true,
+          header: { runs: [], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center' as const,
+        },
+      },
+    });
+  });
+
+  it('initializes editingHeaderFooter as null', () => {
+    const state = usePageStore.getState();
+    expect(state.editingHeaderFooter).toBeNull();
+  });
+
+  it('setEditingHeaderFooter("header") sets mode to header', () => {
+    usePageStore.getState().setEditingHeaderFooter('header');
+    expect(usePageStore.getState().editingHeaderFooter).toBe('header');
+  });
+
+  it('setEditingHeaderFooter("footer") sets mode to footer', () => {
+    usePageStore.getState().setEditingHeaderFooter('footer');
+    expect(usePageStore.getState().editingHeaderFooter).toBe('footer');
+  });
+
+  it('switches from header to footer', () => {
+    usePageStore.getState().setEditingHeaderFooter('header');
+    usePageStore.getState().setEditingHeaderFooter('footer');
+    expect(usePageStore.getState().editingHeaderFooter).toBe('footer');
+  });
+
+  it('setEditingHeaderFooter(null) exits editing mode', () => {
+    usePageStore.getState().setEditingHeaderFooter('header');
+    usePageStore.getState().setEditingHeaderFooter(null);
+    expect(usePageStore.getState().editingHeaderFooter).toBeNull();
+  });
+
+  it('updateHeaderFooterRuns updates header runs', () => {
+    const runs: TextRun[] = [
+      { id: 'r1', type: 'text', content: 'Header Text', marks: ['bold'] },
+    ];
+    usePageStore.getState().updateHeaderFooterRuns('header', runs);
+    const state = usePageStore.getState();
+    expect(state.config.headerFooter.header.runs).toEqual(runs);
+    // Footer should be unchanged
+    expect(state.config.headerFooter.footer.runs).toEqual([]);
+  });
+
+  it('updateHeaderFooterRuns updates footer runs', () => {
+    const runs: TextRun[] = [
+      { id: 'r2', type: 'text', content: 'Footer Text', marks: [] },
+    ];
+    usePageStore.getState().updateHeaderFooterRuns('footer', runs);
+    const state = usePageStore.getState();
+    expect(state.config.headerFooter.footer.runs).toEqual(runs);
+    // Header should be unchanged
+    expect(state.config.headerFooter.header.runs).toEqual([]);
+  });
+
+  it('updateHeaderFooterRuns does not affect other config', () => {
+    const runs: TextRun[] = [
+      { id: 'r3', type: 'text', content: 'Test', marks: [] },
+    ];
+    usePageStore.getState().updateHeaderFooterRuns('header', runs);
+    const state = usePageStore.getState();
+    expect(state.config.headerFooter.enabled).toBe(true);
+    expect(state.config.headerFooter.pageNumberPosition).toBe('bottom-center');
+  });
+});
+
+describe('page-store updateHeaderFooter recalculation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    usePageStore.setState({
+      config: {
+        paperSize: { name: 'A4', width: 794, height: 1123 },
+        orientation: 'portrait',
+        margins: { top: 96, right: 96, bottom: 96, left: 96 },
+        headerFooter: {
+          enabled: false,
+          firstPageDifferent: true,
+          header: { runs: [], height: 36 },
+          footer: { runs: [], height: 36 },
+          pageNumberPosition: 'bottom-center' as const,
+        },
+      },
+      pages: [],
+      totalPages: 0,
+    });
+  });
+
+  it('recalculates layout and pagination when enabling headers/footers', () => {
+    usePageStore.getState().updateHeaderFooter({ enabled: true });
+    expect(mockCalculateLayout).toHaveBeenCalled();
+    expect(mockMarkDirty).toHaveBeenCalled();
+  });
+
+  it('recalculates layout and pagination when changing header height', () => {
+    usePageStore.getState().updateHeaderFooter({
+      header: { runs: [], height: 50 },
+    });
+    expect(mockCalculateLayout).toHaveBeenCalled();
+    expect(mockMarkDirty).toHaveBeenCalled();
+  });
+
+  it('recalculates layout and pagination when changing footer height', () => {
+    usePageStore.getState().updateHeaderFooter({
+      footer: { runs: [], height: 50 },
+    });
+    expect(mockCalculateLayout).toHaveBeenCalled();
     expect(mockMarkDirty).toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from typing import List
-from pydantic import BaseModel
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import io
 
@@ -15,6 +15,32 @@ from ..services.pdf_export import exporter
 router = APIRouter(prefix="/api", tags=["documents"])
 
 
+# ── Header/Footer Models ─────────────────────────────────────────
+
+
+class HeaderFooterRun(BaseModel):
+    """A single text run in header/footer."""
+    content: str
+    marks: List[str] = []
+    attrs: Optional[dict] = None
+
+
+class HeaderFooterContent(BaseModel):
+    """Header or footer content with runs and height."""
+    runs: List[HeaderFooterRun]
+    height: float = Field(ge=0)
+    attrs: Optional[dict] = None
+
+
+class HeaderFooterConfig(BaseModel):
+    """Complete header/footer configuration."""
+    enabled: bool
+    firstPageDifferent: bool = False
+    header: HeaderFooterContent
+    footer: HeaderFooterContent
+    scope: Literal['all', 'exceptFirst', 'firstOnly'] = 'all'
+
+
 class ExportRequest(BaseModel):
     """Request for PDF export."""
     content: dict
@@ -22,6 +48,7 @@ class ExportRequest(BaseModel):
     orientation: str = "portrait"
     margins: dict = {"top": 72, "right": 72, "bottom": 72, "left": 72}
     page_breaks: list[str] = []  # block IDs where page breaks should occur
+    header_footer: Optional[HeaderFooterConfig] = None
 
 
 # ── Document CRUD ─────────────────────────────────────────────────
@@ -113,12 +140,14 @@ def export_pdf(
 ):
     """Export document content to PDF."""
     try:
+        hf_dict = request.header_footer.model_dump() if request.header_footer else None
         pdf_bytes = exporter.export(
             content=request.content,
             paper_size=request.paper_size,
             orientation=request.orientation,
             margins=request.margins,
             page_breaks=request.page_breaks,
+            header_footer=hf_dict,
         )
 
         return StreamingResponse(

@@ -18,6 +18,7 @@ vi.mock('../../api/client', () => ({
 const mockUpdatePaperSize = vi.fn();
 const mockUpdateOrientation = vi.fn();
 const mockUpdateMargins = vi.fn();
+const mockUpdateHeaderFooter = vi.fn();
 
 // Mock the page-store so newDocument doesn't fail
 vi.mock('../page-store', () => ({
@@ -27,6 +28,7 @@ vi.mock('../page-store', () => ({
       updatePaperSize: mockUpdatePaperSize,
       updateOrientation: mockUpdateOrientation,
       updateMargins: mockUpdateMargins,
+      updateHeaderFooter: mockUpdateHeaderFooter,
     }),
   },
 }));

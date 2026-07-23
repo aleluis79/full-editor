@@ -227,12 +227,35 @@ export async function fetchSharedWithMe(): Promise<SharedWithMeDocument[]> {
 
 // ── PDF Export ──────────────────────────────────────────────────
 
+export interface HeaderFooterRun {
+  content: string;
+  marks?: string[];
+  attrs?: Record<string, any>;
+}
+
+export interface HeaderFooterContent {
+  runs: HeaderFooterRun[];
+  height: number;
+  attrs?: {
+    textAlign?: 'left' | 'center' | 'right';
+  };
+}
+
+export interface HeaderFooterPayload {
+  enabled: boolean;
+  firstPageDifferent: boolean;
+  header: HeaderFooterContent;
+  footer: HeaderFooterContent;
+  scope?: 'all' | 'exceptFirst' | 'firstOnly';
+}
+
 export interface ExportPDFData {
   content: Record<string, unknown>;
   paper_size?: string;
   orientation?: string;
   margins?: { top: number; right: number; bottom: number; left: number };
   page_breaks?: string[];
+  header_footer?: HeaderFooterPayload;
 }
 
 /**

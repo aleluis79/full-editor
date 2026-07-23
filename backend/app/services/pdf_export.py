@@ -16,6 +16,7 @@ from reportlab.platypus import (
 from reportlab.lib import colors
 from pathlib import Path
 from typing import Dict, Any, List
+from datetime import datetime
 import io
 
 
@@ -59,8 +60,11 @@ class PDFExporter:
         self._setup_custom_styles()
         # Will be set during export()
         self._page_width = 595
+        self._page_height = 842  # A4 default height
         self._left_margin = 72
         self._right_margin = 72
+        self._header_footer_config = None
+        self._total_pages = None
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles."""
@@ -107,6 +111,7 @@ class PDFExporter:
         orientation: str = "portrait",
         margins: Dict[str, float] = None,
         page_breaks: list[str] = None,
+        header_footer: Dict[str, Any] = None,
     ) -> bytes:
         """
         Export document content to PDF.
@@ -118,6 +123,7 @@ class PDFExporter:
             orientation: Page orientation ('portrait' or 'landscape')
             margins: Margins in points {top, right, bottom, left}
             page_breaks: Block IDs where explicit page breaks should occur
+            header_footer: Optional header/footer configuration
         
         Returns:
             PDF file as bytes
@@ -136,8 +142,15 @@ class PDFExporter:
         
         # Store page dimensions for child methods
         self._page_width = page_size[0]
+        self._page_height = page_size[1]
         self._left_margin = margins.get("left", 72)
         self._right_margin = margins.get("right", 72)
+        
+        # Adjust margins for header/footer
+        top_margin, bottom_margin = self._adjust_margins(margins, header_footer)
+        
+        if header_footer and header_footer.get("enabled"):
+            self._header_footer_config = header_footer
         
         # Create PDF in memory
         buffer = io.BytesIO()
@@ -148,19 +161,39 @@ class PDFExporter:
             pagesize=page_size,
             rightMargin=self._right_margin,
             leftMargin=self._left_margin,
-            topMargin=margins.get("top", 72),
-            bottomMargin=margins.get("bottom", 72),
+            topMargin=top_margin,
+            bottomMargin=bottom_margin,
         )
         
         # Build story (content) with page breaks
         story = self._build_story(content, page_breaks)
         
-        # Generate PDF
-        doc.build(story)
+        # Check if {totalPages} token is present
+        needs_total_pages = self._has_total_pages_token()
+        
+        if needs_total_pages:
+            # First pass: count pages
+            self._total_pages = self._count_pages(doc, story)
+            # Rebuild story since _count_pages consumed it (ReportLab modifies flowables during build)
+            story = self._build_story(content, page_breaks)
+        
+        # Second pass: build with header/footer callback
+        if self._header_footer_config:
+            doc.build(
+                story,
+                onFirstPage=self._render_header_footer,
+                onLaterPages=self._render_header_footer,
+            )
+        else:
+            doc.build(story)
         
         # Get PDF bytes
         pdf_bytes = buffer.getvalue()
         buffer.close()
+        
+        # Reset state
+        self._header_footer_config = None
+        self._total_pages = None
         
         return pdf_bytes
     
@@ -554,6 +587,287 @@ class PDFExporter:
                     content = f'<font {" ".join(font_attrs)}>{content}</font>'
                 
                 text_parts.append(content)
+        
+        return "".join(text_parts)
+    
+    def _render_header_footer(self, canvas, doc):
+        """
+        Callback for SimpleDocTemplate.build() to render header/footer on each page.
+        
+        Determines if header/footer should render based on scope and firstPageDifferent,
+        then calls _draw_header_footer for each section.
+        """
+        if not self._header_footer_config:
+            return
+        
+        page_num = canvas.getPageNumber()
+        config = self._header_footer_config
+        scope = config.get("scope", "all")
+        first_page_different = config.get("firstPageDifferent", False)
+        
+        # Determine if this page should show header/footer
+        should_render = True
+        if first_page_different and page_num == 1:
+            should_render = False
+        elif scope == "exceptFirst" and page_num == 1:
+            should_render = False
+        elif scope == "firstOnly" and page_num > 1:
+            should_render = False
+        
+        if not should_render:
+            return
+        
+        # Render header
+        header_config = config.get("header", {})
+        if header_config.get("runs"):
+            self._draw_header_footer(
+                canvas, doc, header_config, is_header=True, page_num=page_num
+            )
+        
+        # Render footer
+        footer_config = config.get("footer", {})
+        if footer_config.get("runs"):
+            self._draw_header_footer(
+                canvas, doc, footer_config, is_header=False, page_num=page_num
+            )
+    
+    def _draw_header_footer(
+        self, canvas, doc, config: Dict, is_header: bool, page_num: int
+    ):
+        """
+        Draw header or footer content on canvas.
+        
+        Args:
+            canvas: ReportLab canvas object
+            doc: ReportLab document object
+            config: Header or footer config dict with 'runs' and 'height'
+            is_header: True for header, False for footer
+            page_num: Current page number
+        """
+        runs = config.get("runs", [])
+        height = config.get("height", 36)
+        attrs = config.get("attrs", {})
+        text_align = attrs.get("textAlign", "left")
+        
+        # Build styled text from runs
+        styled_text = self._build_header_footer_text(runs, page_num)
+        
+        # Calculate position
+        if is_header:
+            # Header: top of page, within top margin
+            # doc.topMargin already includes header_height from _adjust_margins
+            y = self._page_height - doc.topMargin
+        else:
+            # Footer: bottom of page, within bottom margin
+            # doc.bottomMargin already includes footer_height from _adjust_margins
+            y = doc.bottomMargin
+        
+        # Map alignment
+        align_map = {
+            "left": TA_LEFT,
+            "center": TA_CENTER,
+            "right": TA_RIGHT,
+        }
+        alignment = align_map.get(text_align, TA_LEFT)
+        
+        # Create paragraph style
+        style = ParagraphStyle(
+            'HeaderFooterStyle',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            leading=12,
+            alignment=alignment,
+        )
+        
+        # Create paragraph and draw it
+        para = Paragraph(styled_text, style)
+        para_width = self._page_width - doc.leftMargin - doc.rightMargin
+        para.wrapOn(canvas, para_width, height)
+        
+        # Adjust y position based on header/footer
+        # For header: draw at y (top of content area), paragraph extends upward into margin
+        # For footer: draw at y - height (below content area), paragraph extends upward into margin
+        if is_header:
+            draw_y = y
+        else:
+            draw_y = y - height
+        
+        para.drawOn(canvas, doc.leftMargin, draw_y)
+    
+    def _has_total_pages_token(self) -> bool:
+        """
+        Check if any run in header or footer contains {totalPages} token.
+        
+        Returns:
+            True if {totalPages} found, False otherwise
+        """
+        if not self._header_footer_config:
+            return False
+        
+        for section in ["header", "footer"]:
+            runs = self._header_footer_config.get(section, {}).get("runs", [])
+            for run in runs:
+                if "{totalPages}" in run.get("content", ""):
+                    return True
+        return False
+    
+    def _count_pages(self, doc: SimpleDocTemplate, story: List) -> int:
+        """
+        First pass: build to temporary buffer to count pages.
+        
+        Args:
+            doc: ReportLab document template
+            story: List of flowables
+        
+        Returns:
+            Number of pages in the document
+        """
+        temp_buffer = io.BytesIO()
+        temp_doc = SimpleDocTemplate(
+            temp_buffer,
+            pagesize=doc.pagesize,
+            rightMargin=doc.rightMargin,
+            leftMargin=doc.leftMargin,
+            topMargin=doc.topMargin,
+            bottomMargin=doc.bottomMargin,
+        )
+        temp_doc.build(story)
+        
+        # Parse PDF to count pages (fallback method since PyPDF2 not available)
+        temp_buffer.seek(0)
+        pdf_content = temp_buffer.read()
+        # Count /Type /Page entries (excluding /Type /Pages which is the parent)
+        page_count = pdf_content.count(b'/Type /Page') - pdf_content.count(b'/Type /Pages')
+        temp_buffer.close()
+        
+        return max(1, page_count)  # At least 1 page
+    
+    def _adjust_margins(self, margins: Dict, header_footer: Dict) -> tuple[float, float]:
+        """
+        Adjust top/bottom margins to reserve space for header/footer.
+        
+        Args:
+            margins: Original margins dict with 'top' and 'bottom' keys
+            header_footer: Header/footer config dict
+        
+        Returns:
+            Tuple of (top_margin, bottom_margin) adjusted for header/footer
+        """
+        top_margin = margins.get("top", 72)
+        bottom_margin = margins.get("bottom", 72)
+        
+        if header_footer and header_footer.get("enabled"):
+            # Reserve at most 1/3 of page height for header/footer combined
+            # to ensure content area remains usable
+            max_total = self._page_height / 3
+            
+            header_height = header_footer["header"]["height"]
+            footer_height = header_footer["footer"]["height"]
+            
+            # If combined height exceeds max, scale both proportionally
+            total_hf = header_height + footer_height
+            if total_hf > max_total and total_hf > 0:
+                scale = max_total / total_hf
+                header_height *= scale
+                footer_height *= scale
+            
+            top_margin += header_height
+            bottom_margin += footer_height
+        
+        return top_margin, bottom_margin
+    
+    def _resolve_tokens(self, runs: List[Dict], page_num: int) -> str:
+        """
+        Resolve dynamic tokens in header/footer runs.
+        
+        Replaces {pageNumber}, {totalPages}, {date}, {time} with actual values.
+        Unknown tokens are preserved as literals.
+        
+        Args:
+            runs: List of run dicts with 'content' key
+            page_num: Current page number
+        
+        Returns:
+            Concatenated text with tokens resolved
+        """
+        text_parts = []
+        now = datetime.now()  # Cached for consistency across runs
+        
+        for run in runs:
+            content = run.get("content", "")
+            
+            # Replace known tokens
+            content = content.replace("{pageNumber}", str(page_num))
+            
+            if self._total_pages is not None:
+                content = content.replace("{totalPages}", str(self._total_pages))
+            
+            content = content.replace("{date}", now.strftime("%d/%m/%Y"))
+            content = content.replace("{time}", now.strftime("%H:%M"))
+            
+            # Unknown tokens remain unchanged (no regex needed)
+            text_parts.append(content)
+        
+        return "".join(text_parts)
+    
+    def _build_header_footer_text(self, runs: List[Dict], page_num: int) -> str:
+        """
+        Build styled HTML text from header/footer runs with token resolution.
+        
+        Similar to _extract_text but for header/footer runs.
+        Applies marks (bold, italic, underline) and resolves tokens.
+        
+        Args:
+            runs: List of run dicts with 'content', 'marks', and 'attrs'
+            page_num: Current page number for token resolution
+        
+        Returns:
+            HTML string with styles applied
+        """
+        text_parts = []
+        now = datetime.now()
+        
+        for run in runs:
+            content = run.get("content", "")
+            
+            # Resolve tokens first
+            content = content.replace("{pageNumber}", str(page_num))
+            if self._total_pages is not None:
+                content = content.replace("{totalPages}", str(self._total_pages))
+            content = content.replace("{date}", now.strftime("%d/%m/%Y"))
+            content = content.replace("{time}", now.strftime("%H:%M"))
+            
+            # Escape HTML entities
+            content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            
+            marks = run.get("marks", [])
+            attrs = run.get("attrs", {}) or {}
+            
+            # Apply marks
+            if "bold" in marks:
+                content = f"<b>{content}</b>"
+            if "italic" in marks:
+                content = f"<i>{content}</i>"
+            if "underline" in marks:
+                content = f"<u>{content}</u>"
+            
+            # Apply font attributes
+            font_attrs = []
+            fs = attrs.get("fontSize")
+            if fs is not None:
+                font_attrs.append(f'size="{fs}"')
+            ff = attrs.get("fontFamily")
+            if ff is not None and isinstance(ff, str):
+                mapped = _map_font(ff)
+                font_attrs.append(f'face="{mapped}"')
+            color = attrs.get("color")
+            if color and isinstance(color, str):
+                font_attrs.append(f'color="{color}"')
+            
+            if font_attrs:
+                content = f'<font {" ".join(font_attrs)}>{content}</font>'
+            
+            text_parts.append(content)
         
         return "".join(text_parts)
 

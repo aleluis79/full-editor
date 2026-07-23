@@ -1272,6 +1272,94 @@ body {
   text-transform: uppercase;
 }
 
+.page-settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.page-settings-checkbox input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.page-settings-hf-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.page-settings-hf-input {
+  width: 100%;
+  font-size: 12px;
+}
+
+.page-settings-hf-tokens {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.page-settings-token-btn {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page-settings-token-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.page-settings-hf-height {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-settings-position-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+
+.page-settings-position-btn {
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.page-settings-position-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.page-settings-position-btn.active {
+  background: #dbeafe;
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
 /* ============================================================
    Document Manager
    ============================================================ */

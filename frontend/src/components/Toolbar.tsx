@@ -33,10 +33,15 @@ import {
   LineHeight,
   Settings,
   Comment,
+  PageNumber,
+  TotalPages,
+  DateIcon,
+  TimeIcon,
 } from './icons';
 import { PageSettingsPopup } from './PageSettingsPopup';
 import { ShareDialog } from './ShareDialog';
 import { ManageDictionaryPopup } from './ManageDictionaryPopup';
+import { insertTokenAtCursor, toggleMarkOnRuns } from '../core/header-footer-ops';
 
 const FONT_FAMILIES = [
   'Georgia',
@@ -93,6 +98,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const availablePaperSizes = usePageStore((s) => s.availablePaperSizes);
   const calculateLayout = useLayoutStore((s) => s.calculateLayout);
   const doc = useDocumentStore((s) => s.document);
+  const editingHeaderFooter = usePageStore((s) => s.editingHeaderFooter);
+  const setEditingHeaderFooter = usePageStore((s) => s.setEditingHeaderFooter);
+  const updateHeaderFooterRuns = usePageStore((s) => s.updateHeaderFooterRuns);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -481,7 +489,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const handleExportPDF = useCallback(async () => {
     const { document, documentTitle } = useDocumentStore.getState();
     try {
-      const { paperSize, margins, orientation } = usePageStore.getState().config;
+      const { paperSize, margins, orientation, headerFooter } = usePageStore.getState().config;
 
       const content = { children: document.children };
       const filename = `${documentTitle.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
@@ -495,6 +503,29 @@ export function Toolbar({ onBack }: ToolbarProps) {
           bottom: margins.bottom * 72 / 96,
           left: margins.left * 72 / 96,
         },
+        header_footer: headerFooter.enabled ? {
+          enabled: true,
+          firstPageDifferent: headerFooter.firstPageDifferent,
+          header: {
+            runs: headerFooter.header.runs.map(r => ({
+              content: r.content,
+              marks: r.marks,
+              attrs: r.attrs,
+            })),
+            height: headerFooter.header.height * 72 / 96,
+            attrs: headerFooter.header.attrs,
+          },
+          footer: {
+            runs: headerFooter.footer.runs.map(r => ({
+              content: r.content,
+              marks: r.marks,
+              attrs: r.attrs,
+            })),
+            height: headerFooter.footer.height * 72 / 96,
+            attrs: headerFooter.footer.attrs,
+          },
+          scope: 'all',
+        } : undefined,
       }, filename);
     } catch (err) {
       console.error('PDF export failed:', err);
@@ -586,6 +617,49 @@ export function Toolbar({ onBack }: ToolbarProps) {
       e.preventDefault();
     }
   }, []);
+
+  // Header/footer editing mode — show marks + tokens, hide document-specific buttons
+  const isHfMode = editingHeaderFooter !== null;
+
+  const handleInsertHfToken = useCallback((token: string) => {
+    if (!editingHeaderFooter) return;
+    const hf = usePageStore.getState().config.headerFooter;
+    const target = editingHeaderFooter;
+    const currentRuns = target === 'header' ? hf.header.runs : hf.footer.runs;
+    const cursorOffset = usePageStore.getState().hfCursorOffset;
+    const newRuns = insertTokenAtCursor(currentRuns, cursorOffset, token);
+    updateHeaderFooterRuns(target, newRuns);
+    usePageStore.getState().setHfCursorOffset(cursorOffset + token.length);
+  }, [editingHeaderFooter, updateHeaderFooterRuns]);
+
+  // Header/footer mark toggle — operates on runs instead of document
+  const handleToggleHfMark = useCallback((mark: MarkType) => {
+    if (!editingHeaderFooter) return;
+    const hf = usePageStore.getState().config.headerFooter;
+    const target = editingHeaderFooter;
+    const currentRuns = target === 'header' ? hf.header.runs : hf.footer.runs;
+    // Apply mark to all runs (simplified: no selection support yet)
+    const newRuns = toggleMarkOnRuns(currentRuns, 0, currentRuns.reduce((sum, r) => sum + r.content.length, 0), mark);
+    updateHeaderFooterRuns(target, newRuns);
+  }, [editingHeaderFooter, updateHeaderFooterRuns]);
+
+  // Header/footer alignment — stored in header/footer attrs
+  const handleSetHfAlignment = useCallback((align: 'left' | 'center' | 'right') => {
+    if (!editingHeaderFooter) return;
+    const hf = usePageStore.getState().config.headerFooter;
+    const target = editingHeaderFooter;
+    const currentConfig = target === 'header' ? hf.header : hf.footer;
+    // Update alignment in attrs
+    const newConfig = {
+      ...currentConfig,
+      attrs: { ...currentConfig.attrs, textAlign: align },
+    };
+    if (target === 'header') {
+      usePageStore.getState().updateHeaderFooter({ header: newConfig });
+    } else {
+      usePageStore.getState().updateHeaderFooter({ footer: newConfig });
+    }
+  }, [editingHeaderFooter]);
 
   return (
     <div className="toolbar" onMouseDown={handleToolbarMouseDown}>
@@ -709,51 +783,123 @@ export function Toolbar({ onBack }: ToolbarProps) {
       <div className="toolbar-group">
         <button
           className={`toolbar-btn${effectiveMarks.has('bold') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('bold')}
+          onClick={() => isHfMode ? handleToggleHfMark('bold') : handleToggleMark('bold')}
           title={t('boldTooltip')}
         >
           <Bold />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('italic') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('italic')}
+          onClick={() => isHfMode ? handleToggleHfMark('italic') : handleToggleMark('italic')}
           title={t('italicTooltip')}
         >
           <Italic />
         </button>
         <button
           className={`toolbar-btn${effectiveMarks.has('underline') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('underline')}
+          onClick={() => isHfMode ? handleToggleHfMark('underline') : handleToggleMark('underline')}
           title={t('underlineTooltip')}
         >
           <Underline />
         </button>
-        <button
-          className={`toolbar-btn${effectiveMarks.has('strikethrough') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('strikethrough')}
-          title={t('strikethroughTooltip')}
-        >
-          <Strikethrough />
-        </button>
-        <button
-          className={`toolbar-btn${effectiveMarks.has('superscript') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('superscript')}
-          title={t('superscriptTooltip')}
-        >
-          <Superscript />
-        </button>
-        <button
-          className={`toolbar-btn${effectiveMarks.has('subscript') ? ' toolbar-btn-active' : ''}`}
-          onClick={() => handleToggleMark('subscript')}
-          title={t('subscriptTooltip')}
-        >
-          <Subscript />
-        </button>
+        {!isHfMode && (
+          <>
+            <button
+              className={`toolbar-btn${effectiveMarks.has('strikethrough') ? ' toolbar-btn-active' : ''}`}
+              onClick={() => handleToggleMark('strikethrough')}
+              title={t('strikethroughTooltip')}
+            >
+              <Strikethrough />
+            </button>
+            <button
+              className={`toolbar-btn${effectiveMarks.has('superscript') ? ' toolbar-btn-active' : ''}`}
+              onClick={() => handleToggleMark('superscript')}
+              title={t('superscriptTooltip')}
+            >
+              <Superscript />
+            </button>
+            <button
+              className={`toolbar-btn${effectiveMarks.has('subscript') ? ' toolbar-btn-active' : ''}`}
+              onClick={() => handleToggleMark('subscript')}
+              title={t('subscriptTooltip')}
+            >
+              <Subscript />
+            </button>
+          </>
+        )}
       </div>
 
       <div className="toolbar-separator" />
 
+      {/* Token buttons — only visible in header/footer editing mode */}
+      {isHfMode && (
+        <div className="toolbar-group">
+          <button
+            className="toolbar-btn"
+            data-testid="toolbar-token-pageNumber"
+            onClick={() => handleInsertHfToken('{pageNumber}')}
+            title="Insert page number"
+          >
+            <PageNumber />
+          </button>
+          <button
+            className="toolbar-btn"
+            data-testid="toolbar-token-totalPages"
+            onClick={() => handleInsertHfToken('{totalPages}')}
+            title="Insert total pages"
+          >
+            <TotalPages />
+          </button>
+          <button
+            className="toolbar-btn"
+            data-testid="toolbar-token-date"
+            onClick={() => handleInsertHfToken('{date}')}
+            title="Insert date"
+          >
+            <DateIcon />
+          </button>
+          <button
+            className="toolbar-btn"
+            data-testid="toolbar-token-time"
+            onClick={() => handleInsertHfToken('{time}')}
+            title="Insert time"
+          >
+            <TimeIcon />
+          </button>
+        </div>
+      )}
+
+      {/* Alignment buttons — only visible in header/footer editing mode */}
+      {isHfMode && (
+        <div className="toolbar-group">
+          <button
+            className="toolbar-btn"
+            onClick={() => handleSetHfAlignment('left')}
+            title="Align left"
+          >
+            <AlignLeft />
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={() => handleSetHfAlignment('center')}
+            title="Align center"
+          >
+            <AlignCenter />
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={() => handleSetHfAlignment('right')}
+            title="Align right"
+          >
+            <AlignRight />
+          </button>
+        </div>
+      )}
+
+      {isHfMode && <div className="toolbar-separator" />}
+
       {/* Link */}
+      {!isHfMode && (
       <div className="toolbar-group" style={{ position: 'relative' }}>
         <button
           className={`toolbar-btn${showLinkPopup ? ' toolbar-btn-active' : ''}`}
@@ -789,10 +935,12 @@ export function Toolbar({ onBack }: ToolbarProps) {
           </div>
         )}
       </div>
+      )}
 
-      <div className="toolbar-separator" />
+      {!isHfMode && <div className="toolbar-separator" />}
 
       {/* Alignment */}
+      {!isHfMode && (
       <div className="toolbar-group">
         <button
           className="toolbar-btn"
@@ -864,8 +1012,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <AlignRight />
         </button>
       </div>
+      )}
 
       {/* Line spacing */}
+      {!isHfMode && (
       <div className="toolbar-group" style={{ position: 'relative' }}>
         <button
           className={`toolbar-btn${hasNonDefaultLineHeight || showLineSpacing ? ' toolbar-btn-active' : ''}`}
@@ -897,9 +1047,12 @@ export function Toolbar({ onBack }: ToolbarProps) {
           </div>
         )}
       </div>
+      )}
 
-      <div className="toolbar-separator" />
+      {!isHfMode && <div className="toolbar-separator" />}
 
+      {!isHfMode && (
+      <>
       <div className="toolbar-group">
         <button
           className="toolbar-btn"
@@ -1151,6 +1304,8 @@ export function Toolbar({ onBack }: ToolbarProps) {
           <ManageDictionaryPopup onClose={() => setShowDictionaryManager(false)} />
         )}
       </div>
+      </>
+      )}
 
       {/* Spell check popover — rendered at toolbar level for z-index */}
       {spellCheckPopover && popoverPosition && (

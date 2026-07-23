@@ -8,6 +8,7 @@ import type {
   HeaderFooterConfig,
   PageNumberPosition,
 } from '../core/pagination/types';
+import type { TextRun } from '../core/types';
 import { PaginationEngine } from '../core/pagination/engine';
 import { getOrientedSize } from '../core/pagination/paper';
 import { useLayoutStore } from './layout-store';
@@ -29,6 +30,10 @@ interface PageState {
   pages: Page[];
   totalPages: number;
   config: PaginationConfig;
+  /** Which header/footer zone is being edited inline (null = main editor active) */
+  editingHeaderFooter: 'header' | 'footer' | null;
+  /** Cursor offset within the active header/footer textarea */
+  hfCursorOffset: number;
 
   // Actions
   paginate: (layout: DocumentLayout) => void;
@@ -38,6 +43,12 @@ interface PageState {
   updateMargins: (margins: Partial<Margins>) => void;
   updateHeaderFooter: (config: Partial<HeaderFooterConfig>) => void;
   updatePageNumberPosition: (position: PageNumberPosition) => void;
+  /** Set which header/footer zone is being edited inline */
+  setEditingHeaderFooter: (mode: 'header' | 'footer' | null) => void;
+  /** Update runs for header or footer target */
+  updateHeaderFooterRuns: (target: 'header' | 'footer', runs: TextRun[]) => void;
+  /** Set cursor offset within the active header/footer textarea */
+  setHfCursorOffset: (offset: number) => void;
   /** Rounded paper sizes for the UI selector */
   availablePaperSizes: PaperSize[];
 }
@@ -49,6 +60,8 @@ export const usePageStore = create<PageState>((set, get) => ({
   }),
   pages: [],
   totalPages: 0,
+  editingHeaderFooter: null,
+  hfCursorOffset: 0,
   config: {
     paperSize: { ...DEFAULT_PAPER },
     orientation: 'portrait',
@@ -66,6 +79,29 @@ export const usePageStore = create<PageState>((set, get) => ({
     { name: 'Letter', width: 816, height: 1056 },
     { name: 'Legal', width: 816, height: 1344 },
   ],
+
+  setEditingHeaderFooter: (mode) => {
+    set({ editingHeaderFooter: mode });
+  },
+
+  setHfCursorOffset: (offset) => {
+    set({ hfCursorOffset: offset });
+  },
+
+  updateHeaderFooterRuns: (target, runs) => {
+    const { engine, config } = get();
+    const hf = config.headerFooter;
+    engine.updateConfig({
+      headerFooter: {
+        ...hf,
+        [target]: { ...hf[target], runs },
+      },
+    });
+    set({ config: engine.getConfig() });
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
+  },
 
   paginate: (layout) => {
     const { engine } = get();
@@ -157,7 +193,7 @@ export const usePageStore = create<PageState>((set, get) => ({
   },
 
   updateHeaderFooter: (hfConfig) => {
-    const { engine, config } = get();
+    const { engine, config, paginate } = get();
     engine.updateConfig({
       headerFooter: {
         ...config.headerFooter,
@@ -165,10 +201,20 @@ export const usePageStore = create<PageState>((set, get) => ({
       },
     });
     set({ config: engine.getConfig() });
+
+    // Recalculate layout & pagination so the page view reflects the new header/footer areas
+    const doc = useDocumentStore.getState().document;
+    useLayoutStore.getState().calculateLayout(doc);
+    // Re-read layout after calculateLayout updates the store (Zustand returns new state object)
+    const freshLayout = useLayoutStore.getState().layout;
+    if (freshLayout) paginate(freshLayout);
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
   },
 
   updatePageNumberPosition: (position) => {
-    const { engine, config } = get();
+    const { engine, config, paginate } = get();
     engine.updateConfig({
       headerFooter: {
         ...config.headerFooter,
@@ -176,5 +222,14 @@ export const usePageStore = create<PageState>((set, get) => ({
       },
     });
     set({ config: engine.getConfig() });
+
+    // Recalculate pagination to reflect the new page number position
+    const doc = useDocumentStore.getState().document;
+    useLayoutStore.getState().calculateLayout(doc);
+    const freshLayout = useLayoutStore.getState().layout;
+    if (freshLayout) paginate(freshLayout);
+
+    // Mark document as dirty so the save button is enabled
+    useDocumentStore.getState().markDirty();
   },
 }));

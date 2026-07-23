@@ -203,6 +203,15 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       const blocks = (content?.blocks as any[]) ?? [createParagraph('')];
       const savedConfig = content?.config as Record<string, unknown> | undefined;
 
+      // Reset header/footer to defaults before restoring saved config
+      usePageStore.getState().updateHeaderFooter({
+        enabled: false,
+        firstPageDifferent: true,
+        header: { runs: [], height: 36 },
+        footer: { runs: [], height: 36 },
+        pageNumberPosition: 'bottom-center',
+      });
+
       // Restore saved page config
       if (savedConfig?.paperSize && savedConfig?.margins) {
         usePageStore.getState().updatePaperSize(savedConfig.paperSize as any);
@@ -214,6 +223,10 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
       // Restore margins (triggers layout recalc with correct content width)
       if (savedConfig?.margins) {
         usePageStore.getState().updateMargins(savedConfig.margins as any);
+      }
+      // Restore header/footer configuration
+      if (savedConfig?.headerFooter) {
+        usePageStore.getState().updateHeaderFooter(savedConfig.headerFooter as any);
       }
 
       set({
@@ -246,6 +259,7 @@ export const useDocumentStore = create<DocumentState>((_set, get) => {
           paperSize: pageConfig.paperSize,
           orientation: pageConfig.orientation,
           margins: pageConfig.margins,
+          headerFooter: pageConfig.headerFooter,
         },
       };
       await apiUpdateDoc(currentDocId, { title: documentTitle, content: content as any });

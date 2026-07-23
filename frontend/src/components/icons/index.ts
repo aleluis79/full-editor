@@ -25,3 +25,7 @@ export { HighlightPicker } from './HighlightPicker';
 export { LineHeight } from './LineHeight';
 export { Settings } from './Settings';
 export { Comment } from './Comment';
+export { PageNumber } from './PageNumber';
+export { TotalPages } from './TotalPages';
+export { DateIcon } from './DateIcon';
+export { TimeIcon } from './TimeIcon';

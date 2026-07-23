@@ -26,6 +26,10 @@ export interface HeaderFooterContent {
   runs: TextRun[];
   /** Height in points */
   height: number;
+  /** Block-level attributes (alignment, etc.) */
+  attrs?: {
+    textAlign?: 'left' | 'center' | 'right';
+  };
 }
 
 /** Page number position */

@@ -14,6 +14,7 @@ import { HorizontalRuleBlock } from './HorizontalRuleBlock';
 import { ImageBlock } from './ImageBlock';
 import { TableBlock } from './TableBlock';
 import { CommentIndicator } from './CommentIndicator';
+import { InlineHeaderFooterEditor } from './InlineHeaderFooterEditor';
 import { useCommentStore } from '../stores/comment-store';
 import type { Misspelling } from '../stores/spell-check-store';
 import { useSpellCheckStore } from '../stores/spell-check-store';
@@ -39,6 +40,33 @@ export function DocumentView({ blocks: _blocks, activeBlockId, onBlockMouseDown,
   const getBlockLayout = useLayoutStore((s) => s.getBlockLayout);
   const containerRef = useRef<HTMLDivElement>(null);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 10 });
+
+  // Escape key exits header/footer editing mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && usePageStore.getState().editingHeaderFooter !== null) {
+        usePageStore.getState().setEditingHeaderFooter(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Click outside header/footer editor and toolbar exits editing mode
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (usePageStore.getState().editingHeaderFooter === null) return;
+      const target = e.target as Node;
+      if (!target || !(target instanceof Node)) return;
+      const isInsideHfEditor = !!document.querySelector('.inline-hf-editor.active')?.contains(target);
+      const isInsideToolbar = !!document.querySelector('.toolbar')?.contains(target);
+      if (!isInsideHfEditor && !isInsideToolbar) {
+        usePageStore.getState().setEditingHeaderFooter(null);
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, []);
 
   // Handle scroll for virtualization
   const handleScroll = useCallback(() => {
@@ -120,6 +148,9 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
   const commentData = useCommentStore((s) => s.comments);
   const commentActiveBlock = useCommentStore((s) => s.activeBlockId);
   const setActiveBlock = useCommentStore((s) => s.setActiveBlock);
+  
+  // Subscribe to editing state for header/footer
+  const editingHeaderFooter = usePageStore((s) => s.editingHeaderFooter);
 
   // Build a map of block_id → comments
   const commentsByBlock = new Map<string, typeof commentData>();
@@ -158,17 +189,18 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
     >
       {/* Header */}
       {headerFooter.enabled && page.headerArea && !(headerFooter.firstPageDifferent && page.index === 0) && (
-        <div
-          className="page-header"
-          style={{
-            top: page.headerArea.y,
-            left: page.headerArea.x,
-            width: page.headerArea.width,
-            height: page.headerArea.height,
-          }}
-        >
-          {renderHeaderFooterContent(headerFooter.header.runs)}
-        </div>
+        <InlineHeaderFooterEditor
+          target="header"
+          runs={headerFooter.header.runs}
+          area={page.headerArea}
+          isActive={editingHeaderFooter === 'header'}
+          pageNumber={page.pageNumber}
+          totalPages={usePageStore.getState().totalPages}
+          textAlign={headerFooter.header.attrs?.textAlign || 'left'}
+          onActivate={() => usePageStore.getState().setEditingHeaderFooter('header')}
+          onChange={(runs) => usePageStore.getState().updateHeaderFooterRuns('header', runs)}
+          onCursorChange={(offset) => usePageStore.getState().setHfCursorOffset(offset)}
+        />
       )}
 
       {/* Content */}
@@ -277,18 +309,19 @@ function PageRenderer({ page, blocks, activeBlockId, onBlockMouseDown, onBlockCl
       )}
 
       {/* Footer with page number */}
-      {page.footerArea && (
-        <div
-          className="page-footer"
-          style={{
-            top: page.footerArea.y,
-            left: page.footerArea.x,
-            width: page.footerArea.width,
-            height: page.footerArea.height,
-          }}
-        >
-          {renderPageNumber(page.pageNumber, headerFooter.pageNumberPosition)}
-        </div>
+      {headerFooter.enabled && page.footerArea && !(headerFooter.firstPageDifferent && page.index === 0) && (
+        <InlineHeaderFooterEditor
+          target="footer"
+          runs={headerFooter.footer.runs}
+          area={page.footerArea}
+          isActive={editingHeaderFooter === 'footer'}
+          pageNumber={page.pageNumber}
+          totalPages={usePageStore.getState().totalPages}
+          textAlign={headerFooter.footer.attrs?.textAlign || 'left'}
+          onActivate={() => usePageStore.getState().setEditingHeaderFooter('footer')}
+          onChange={(runs) => usePageStore.getState().updateHeaderFooterRuns('footer', runs)}
+          onCursorChange={(offset) => usePageStore.getState().setHfCursorOffset(offset)}
+        />
       )}
 
       {/* Page number (when no footer) */}
