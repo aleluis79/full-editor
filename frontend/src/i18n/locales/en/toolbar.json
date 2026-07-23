@@ -43,5 +43,9 @@
   "spellCheckDisable": "Disable spell check",
   "suggestions": "Suggestions",
   "addToDictionary": "Add to dictionary",
-  "noSuggestions": "No suggestions"
+  "noSuggestions": "No suggestions",
+  "manageDictionary": "Manage dictionary",
+  "dictionaryEmpty": "No custom words added yet",
+  "removeFromDictionary": "Remove from dictionary",
+  "loading": "Loading..."
 }

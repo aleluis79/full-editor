@@ -4,7 +4,7 @@ import { useDocumentStore } from '../stores/document-store';
 import { useEditorStore } from '../stores/editor-store';
 import { getSelectionRange, isSelectionEmpty } from '../core/selection';
 import { getRunStylesAtOffset, findNode, getBlockNodes } from '../core/document';
-import { exportPDF } from '../api/client';
+import { exportPDF, addCustomWord } from '../api/client';
 import { usePageStore } from '../stores/page-store';
 import { useLayoutStore } from '../stores/layout-store';
 import { useCommentStore } from '../stores/comment-store';
@@ -36,6 +36,7 @@ import {
 } from './icons';
 import { PageSettingsPopup } from './PageSettingsPopup';
 import { ShareDialog } from './ShareDialog';
+import { ManageDictionaryPopup } from './ManageDictionaryPopup';
 
 const FONT_FAMILIES = [
   'Georgia',
@@ -54,7 +55,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onBack }: ToolbarProps) {
-  const { t } = useTranslation('toolbar');
+  const { t, i18n } = useTranslation('toolbar');
   const selection = useEditorStore((s) => s.selection);
   const cursor = useEditorStore((s) => s.cursor);
   const stickyMarks = useEditorStore((s) => s.stickyMarks);
@@ -137,6 +138,7 @@ export function Toolbar({ onBack }: ToolbarProps) {
   const spellCheckPopover = useSpellCheckStore((s) => s.popover);
   const popoverPosition = useSpellCheckStore((s) => s.popoverPosition);
   const hideSpellCheckPopover = useSpellCheckStore((s) => s.hidePopover);
+  const [showDictionaryManager, setShowDictionaryManager] = useState(false);
 
   const replaceTextWithSuggestion = useCallback(
     (blockId: string, start: number, end: number, replacement: string) => {
@@ -159,13 +161,19 @@ export function Toolbar({ onBack }: ToolbarProps) {
   );
 
   const handleAddToDictionary = useCallback(
-    (word: string) => {
+    async (word: string) => {
       if (!word) return;
-      const addToDict = useSpellCheckStore.getState().addCustomWord;
-      addToDict(word);
+      try {
+        const lang = i18n.language?.startsWith('es') ? 'es' : 'en';
+        await addCustomWord(word, lang);
+        useSpellCheckStore.getState().addCustomWord(word);
+      } catch {
+        // Fallback: add locally even if API fails
+        useSpellCheckStore.getState().addCustomWord(word);
+      }
       hideSpellCheckPopover();
     },
-    [hideSpellCheckPopover],
+    [hideSpellCheckPopover, i18n.language],
   );
 
   // ── Image input ref ────────────────────────────────────────
@@ -1116,9 +1124,9 @@ export function Toolbar({ onBack }: ToolbarProps) {
         )}
       </div>
 
-      {/* Spell check toggle */}
+      {/* Spell check toggle & dictionary */}
       <div className="toolbar-separator" />
-      <div className="toolbar-group">
+      <div className="toolbar-group" style={{ position: 'relative' }}>
         <button
           className={`toolbar-btn${spellCheckEnabled ? ' toolbar-btn-active' : ''}`}
           onClick={spellCheckToggle}
@@ -1129,6 +1137,19 @@ export function Toolbar({ onBack }: ToolbarProps) {
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
           </svg>
         </button>
+        <button
+          className={`toolbar-btn${showDictionaryManager ? ' toolbar-btn-active' : ''}`}
+          onClick={() => setShowDictionaryManager(!showDictionaryManager)}
+          title={t('manageDictionary')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+        </button>
+        {showDictionaryManager && (
+          <ManageDictionaryPopup onClose={() => setShowDictionaryManager(false)} />
+        )}
       </div>
 
       {/* Spell check popover — rendered at toolbar level for z-index */}

@@ -1,7 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSpellCheckStore } from '../stores/spell-check-store';
+import { useDocumentStore } from '../stores/document-store';
+import { getBlockNodes, getBlockText } from '../core/document';
 import type { PopoverState } from '../stores/spell-check-store';
+import type { Paragraph, Heading } from '../core/types';
 
 interface SpellCheckPopoverProps {
   /** Position of the popover relative to the viewport */
@@ -56,14 +59,18 @@ export function SpellCheckPopover({
     onClose();
   };
 
+  // Extract the misspelled word from the block content using offset range
+  const misspelledWord = useMemo(() => {
+    const doc = useDocumentStore.getState().document;
+    const blocks = getBlockNodes(doc);
+    const block = blocks.find((b) => b.id === popover.blockId);
+    if (!block || (block.type !== 'paragraph' && block.type !== 'heading')) return '';
+    const text = getBlockText(block as Paragraph | Heading);
+    return text.slice(popover.start, popover.end);
+  }, [popover.blockId, popover.start, popover.end]);
+
   const handleAddToDictionary = () => {
-    // The word is the original misspelled word
-    const word = popover.suggestions.length > 0
-      ? document.querySelector('.spell-misspelled')?.textContent ?? ''
-      : '';
-    // Fallback: use the word from the popover context
-    // In practice, the word is determined by the click handler
-    onAddToDictionary(word);
+    onAddToDictionary(misspelledWord);
     onClose();
   };
 
@@ -85,40 +92,13 @@ export function SpellCheckPopover({
       }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {popover.suggestions.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {popover.suggestions.slice(0, 6).map((suggestion, i) => (
-            <button
-              key={i}
-              className="spell-check-suggestion"
-              onClick={() => handleSuggestionClick(suggestion)}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '6px var(--space-2)',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontFamily: 'var(--font-family)',
-                color: 'var(--color-text)',
-                borderRadius: 'var(--radius-sm)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--color-bg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'none';
-              }}
-            >
-              {suggestion}
-            </button>
-          ))}
-          <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Suggestions list */}
+        {popover.suggestions.slice(0, 6).map((suggestion, i) => (
           <button
-            className="spell-check-add-dict"
-            onClick={handleAddToDictionary}
+            key={i}
+            className="spell-check-suggestion"
+            onClick={() => handleSuggestionClick(suggestion)}
             style={{
               display: 'block',
               width: '100%',
@@ -127,9 +107,9 @@ export function SpellCheckPopover({
               border: 'none',
               background: 'none',
               cursor: 'pointer',
-              fontSize: 13,
-              fontFamily: 'var(--font-ui)',
-              color: 'var(--color-text-secondary)',
+              fontSize: 14,
+              fontFamily: 'var(--font-family)',
+              color: 'var(--color-text)',
               borderRadius: 'var(--radius-sm)',
             }}
             onMouseEnter={(e) => {
@@ -139,14 +119,47 @@ export function SpellCheckPopover({
               e.currentTarget.style.background = 'none';
             }}
           >
-            {t('addToDictionary')}
+            {suggestion}
           </button>
-        </div>
-      ) : (
-        <div style={{ padding: '6px var(--space-2)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          {t('noSuggestions')}
-        </div>
-      )}
+        ))}
+
+        {/* No suggestions message */}
+        {popover.suggestions.length === 0 && (
+          <div style={{ padding: '6px var(--space-2)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            {t('noSuggestions')}
+          </div>
+        )}
+
+        {/* Separator + Add to dictionary — always visible */}
+        {popover.suggestions.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+        )}
+        <button
+          className="spell-check-add-dict"
+          onClick={handleAddToDictionary}
+          style={{
+            display: 'block',
+            width: '100%',
+            textAlign: 'left',
+            padding: '6px var(--space-2)',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            fontSize: 13,
+            fontFamily: 'var(--font-ui)',
+            color: 'var(--color-text-secondary)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--color-bg)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'none';
+          }}
+        >
+          {t('addToDictionary')}
+        </button>
+      </div>
     </div>
   );
 }

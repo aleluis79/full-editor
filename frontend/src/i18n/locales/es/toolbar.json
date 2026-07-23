@@ -43,5 +43,9 @@
   "spellCheckDisable": "Desactivar corrector ortográfico",
   "suggestions": "Sugerencias",
   "addToDictionary": "Agregar al diccionario",
-  "noSuggestions": "Sin sugerencias"
+  "noSuggestions": "Sin sugerencias",
+  "manageDictionary": "Administrar diccionario",
+  "dictionaryEmpty": "Todavía no agregaste palabras",
+  "removeFromDictionary": "Eliminar del diccionario",
+  "loading": "Cargando..."
 }
