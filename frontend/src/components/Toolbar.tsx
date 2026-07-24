@@ -41,6 +41,7 @@ import {
 import { PageSettingsPopup } from './PageSettingsPopup';
 import { ShareDialog } from './ShareDialog';
 import { ManageDictionaryPopup } from './ManageDictionaryPopup';
+import { ColorPickerPopup } from './ColorPickerPopup';
 import { insertTokenAtCursor, toggleMarkOnRuns } from '../core/header-footer-ops';
 
 const FONT_FAMILIES = [
@@ -108,6 +109,10 @@ export function Toolbar({ onBack }: ToolbarProps) {
   // ── Link popup state ───────────────────────────────────────
   const [showLinkPopup, setShowLinkPopup] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+
+  // ── Color picker state ──────────────────────────────────────
+  const [showTextColor, setShowTextColor] = useState(false);
+  const [showHighlightColor, setShowHighlightColor] = useState(false);
 
   // ── Share dialog state ─────────────────────────────────────
   const commentVisible = useCommentStore((s) => s.visible);
@@ -921,13 +926,13 @@ export function Toolbar({ onBack }: ToolbarProps) {
               placeholder={t('linkPlaceholder')}
             />
             <button
-              className="toolbar-btn"
+              className="toolbar-btn link-popup-btn"
               onClick={handleLinkSubmit}
             >
               {t('linkOk')}
             </button>
             <button
-              className="toolbar-btn"
+              className="toolbar-btn link-popup-btn"
               onClick={handleLinkCancel}
             >
               {t('linkCancel')}
@@ -1116,34 +1121,44 @@ export function Toolbar({ onBack }: ToolbarProps) {
       <div className="toolbar-separator" />
 
       {/* Text Color */}
-      <div className="toolbar-group">
-        <label className="toolbar-color-label" title={t('textColorTooltip')}>
-          <span style={{ color: effectiveAttrs.color ?? '#000' }}>A</span>
-          <input
-            type="color"
-            className="toolbar-color-input"
-            value={effectiveAttrs.color ?? '#000000'}
-            onChange={(e) => handleSetStyle('color', e.target.value)}
+      <div className="toolbar-group" style={{ position: 'relative' }}>
+        <button
+          className="toolbar-color-label"
+          onClick={() => { setShowTextColor(!showTextColor); setShowHighlightColor(false); }}
+          title={t('textColorTooltip')}
+        >
+          <span style={{ color: effectiveAttrs.color ?? 'var(--color-text)' }}>A</span>
+        </button>
+        {showTextColor && (
+          <ColorPickerPopup
+            color={effectiveAttrs.color ?? '#000000'}
+            onChange={(c) => handleSetStyle('color', c)}
+            onClose={() => setShowTextColor(false)}
           />
-        </label>
+        )}
       </div>
 
       {/* Highlight Color */}
-      <div className="toolbar-group">
-        <label className="toolbar-color-label" title={t('highlightColorTooltip')}>
+      <div className="toolbar-group" style={{ position: 'relative' }}>
+        <button
+          className="toolbar-color-label"
+          onClick={() => { setShowHighlightColor(!showHighlightColor); setShowTextColor(false); }}
+          title={t('highlightColorTooltip')}
+        >
           <span style={{
-            backgroundColor: effectiveAttrs.backgroundColor ?? '#fff7d6',
+            backgroundColor: effectiveAttrs.backgroundColor ?? 'var(--color-accent-bg)',
             padding: '0 2px',
           }}>
-            <span style={{ color: '#000' }}>A</span>
+            <span style={{ color: 'var(--color-text)' }}>A</span>
           </span>
-          <input
-            type="color"
-            className="toolbar-color-input"
-            value={effectiveAttrs.backgroundColor ?? '#ffff00'}
-            onChange={(e) => handleSetStyle('backgroundColor', e.target.value)}
+        </button>
+        {showHighlightColor && (
+          <ColorPickerPopup
+            color={effectiveAttrs.backgroundColor ?? '#ffff00'}
+            onChange={(c) => handleSetStyle('backgroundColor', c)}
+            onClose={() => setShowHighlightColor(false)}
           />
-        </label>
+        )}
         {effectiveAttrs.backgroundColor && (
           <button
             className="toolbar-btn toolbar-btn-highlight-remove"

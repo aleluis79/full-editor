@@ -11,5 +11,9 @@
   "readOnly": "Solo lectura — no tienes permiso para editar este documento.",
   "unknownUser": "Usuario",
   "signOut": "Cerrar sesión",
-  "ok": "OK"
+  "ok": "OK",
+  "theme": "Tema",
+  "themeLight": "Claro",
+  "themeDark": "Oscuro",
+  "themeSystem": "Sistema"
 }

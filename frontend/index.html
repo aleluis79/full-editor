@@ -4,7 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>frontend</title>
+    <script>
+      // Flicker prevention: set data-theme before first paint
+      (function() {
+        try {
+          var stored = localStorage.getItem('full-editor-theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.dataset.theme = stored;
+          } else {
+            var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          }
+        } catch (e) {
+          // localStorage or matchMedia unavailable — default to light
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

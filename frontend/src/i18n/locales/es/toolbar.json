@@ -15,7 +15,7 @@
   "subscriptTooltip": "Subíndice",
   "linkTooltip": "Enlace (Ctrl+K)",
   "linkPlaceholder": "https://...",
-  "linkOk": "OK",
+  "linkOk": "Aceptar",
   "linkCancel": "Cancelar",
   "alignLeftTooltip": "Alinear a la izquierda",
   "alignCenterTooltip": "Centrar",

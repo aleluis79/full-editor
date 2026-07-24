@@ -11,5 +11,9 @@
   "readOnly": "Read-only — you don't have permission to edit this document.",
   "unknownUser": "User",
   "signOut": "Sign out",
-  "ok": "OK"
+  "ok": "OK",
+  "theme": "Theme",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "themeSystem": "System"
 }

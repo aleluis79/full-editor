@@ -6,8 +6,10 @@ import LoginPage from './components/LoginPage';
 import { UserMenu } from './components/UserMenu';
 import { useDocumentStore } from './stores/document-store';
 import { useAuthStore } from './stores/auth-store';
+import { useThemeInit } from './hooks/useThemeInit';
 
 function App() {
+  useThemeInit();
   const { initialized } = useKeycloak();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitialized = useAuthStore((s) => s.isInitialized);

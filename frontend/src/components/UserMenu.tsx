@@ -1,15 +1,18 @@
 /**
- * UserMenu — shows the authenticated user's name, language switcher, and a logout button.
+ * UserMenu — shows the authenticated user's name, language switcher, theme toggle, and a logout button.
  */
 import { useTranslation } from 'react-i18next';
 import { useKeycloak } from '@react-keycloak/web';
 import { useAuthStore } from '../stores/auth-store';
+import { useThemeStore } from '../stores/theme-store';
 import { useCallback } from 'react';
 
 export function UserMenu() {
   const { t, i18n } = useTranslation('common');
   const { keycloak } = useKeycloak();
   const user = useAuthStore((s) => s.user);
+  const themePreference = useThemeStore((s) => s.preference);
+  const setThemePreference = useThemeStore((s) => s.setPreference);
 
   const handleLogout = () => {
     keycloak?.logout({ redirectUri: window.location.origin });
@@ -23,6 +26,20 @@ export function UserMenu() {
     },
     [i18n],
   );
+
+  const themeOptions = [
+    { value: 'light' as const, key: 'themeLight', emoji: '☀️' },
+    { value: 'dark' as const, key: 'themeDark', emoji: '🌙' },
+    { value: 'system' as const, key: 'themeSystem', emoji: '💻' },
+  ];
+
+  const currentThemeIndex = themeOptions.findIndex((opt) => opt.value === themePreference);
+  const currentTheme = themeOptions[currentThemeIndex] ?? themeOptions[0];
+
+  const cycleTheme = () => {
+    const next = themeOptions[(currentThemeIndex + 1) % themeOptions.length];
+    setThemePreference(next.value);
+  };
 
   return (
     <div className="user-menu">
@@ -47,6 +64,16 @@ export function UserMenu() {
           title="Español"
         >
           ES
+        </button>
+      </div>
+
+      <div className="user-menu-theme">
+        <button
+          className="theme-cycle-btn"
+          onClick={cycleTheme}
+          title={t('theme')}
+        >
+          {currentTheme.emoji} {t(currentTheme.key)}
         </button>
       </div>
 
